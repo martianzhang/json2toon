@@ -175,13 +175,7 @@ result, err := json2toon.ConvertWithOptions(json,
 
 ## TOON Format
 
-TOON (Token-Oriented Object Notation) is a line-oriented, indentation-based format:
-
-| JSON | TOON |
-|------|------|
-| `{"id": 1}` | `id: 1` |
-| `{"items": [1,2,3]}` | `items:[3]: 1,2,3` |
-| `[{"id":1},{"id":2}]` | `[2]{id}:\n  1\n  2` |
+For detailed format specification, see the [official TOON documentation](https://toonformat.dev/guide/getting-started.html).
 
 ### Round-trip Conversion
 
