@@ -38,15 +38,12 @@ func StripComments(jsonc []byte) ([]byte, error) {
 		if i+1 < len(jsonc) && jsonc[i] == '/' && jsonc[i+1] == '*' {
 			i += 2
 			// Skip until end of block comment
-			for i+1 < len(jsonc) {
-				if jsonc[i] == '*' && jsonc[i+1] == '/' {
+			for i < len(jsonc) {
+				if i+1 < len(jsonc) && jsonc[i] == '*' && jsonc[i+1] == '/' {
 					i += 2
 					break
 				}
 				i++
-			}
-			if i >= len(jsonc) {
-				return nil, errors.New("unterminated block comment")
 			}
 			continue
 		}

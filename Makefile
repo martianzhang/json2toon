@@ -1,4 +1,4 @@
-.PHONY: bin fmt lint test test-cli build release clean
+.PHONY: bin fmt lint test test-cli test-cover build release clean
 
 GOOS := $(shell go env GOOS)
 GOPATH := $(shell go env GOPATH)
@@ -24,6 +24,15 @@ test: fmt
 test-cli: build
 	go test -v ./cmd/j2t/...
 
+test-cover:
+	go test -coverprofile=cover.out ./...
+	go tool cover -func=cover.out
+	@echo "--- HTML report ---"
+	go tool cover -html=cover.out -o cover.html
+
+test-cover-ci:
+	go test -coverprofile=cover.out ./...
+
 release: fmt bin
 	GOOS=linux GOARCH=amd64 go build -o bin/j2t-linux-amd64 ./cmd/j2t
 	GOOS=darwin GOARCH=amd64 go build -o bin/j2t-darwin-amd64 ./cmd/j2t
@@ -31,4 +40,5 @@ release: fmt bin
 	GOOS=windows GOARCH=amd64 go build -o bin/j2t.exe ./cmd/j2t
 
 clean:
+	rm -f cover.out cover.html
 	git clean -fdx
