@@ -23,7 +23,8 @@ go test ./...
 
 ### Run Tests with Coverage
 ```bash
-go test -cover ./...
+go test -coverprofile=cover.out ./...
+go tool cover -func=cover.out | grep '^total:'
 ```
 
 ### Run a Single Test
@@ -33,7 +34,7 @@ go test -v -run TestFunctionName
 
 ### Run Benchmarks
 ```bash
-go test -bench=. -benchmem ./...
+go test -bench=. -benchmem -benchtime=1s ./...
 ```
 
 ### Run Specific Benchmark
@@ -43,7 +44,14 @@ go test -bench=BenchmarkName -benchmem ./...
 
 ### Lint (requires golangci-lint)
 ```bash
-golangci-lint run
+# Install
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Run with project config
+golangci-lint run ./...
+
+# Or use Makefile
+make lint
 ```
 
 ### Format Code
@@ -186,12 +194,13 @@ TOON (Token-Oriented Object Notation) key rules:
 
 ```
 json2toon/
+├── .golangci.yml        # Strict linter configuration
 ├── options.go           # Unified option types (EncoderOptions, DecodeOptions)
 ├── format.go            # Format detection (DetectFormat)
 ├── streaming.go         # Streaming JSON to TOON conversion
 ├── encoder.go           # Core TOON encoder
 ├── decoder.go           # TOON to JSON decoder
-├── decoder_test.go      # Decoder tests
+├── decoder_test.go      # Decoder tests (including edge cases)
 ├── jsonc.go             # JSONC comment stripping
 ├── toon.go              # Public API
 ├── toon_test.go         # Public API tests
@@ -233,6 +242,8 @@ for decoder.More() {
 
 - Don't add external dependencies
 - Don't use `interface{}` without good reason
-- Don't suppress errors with `_`
+- Don't suppress errors with `_` (use explicit `, _` for intentional ignored returns)
 - Don't leave TODO comments (implement or file an issue)
 - Don't commit generated files (coverage.out, etc.)
+- **Never** use `defer xxx.Close()` without handling the error (use `defer func() { _ = xxx.Close() }()`)
+- **Never** use type assertions without checking the ok value (use `val, ok := x.(Type)`)

@@ -2400,7 +2400,7 @@ func TestWithDecodeStrictOption(t *testing.T) {
 		t.Fatalf("Invalid JSON output: %s", result)
 	}
 	// Verify the value is correct
-	m := v.(map[string]interface{})
+	m, _ := v.(map[string]interface{})
 	if m["key"] != "value" {
 		t.Errorf("got %v, want %v", m["key"], "value")
 	}

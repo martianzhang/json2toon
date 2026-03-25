@@ -642,3 +642,348 @@ func TestDecodeStandaloneListItemsWithObjects(t *testing.T) {
 		t.Errorf("Expected 3 items, got %d", len(arr))
 	}
 }
+
+// --- Unicode Edge Cases ---
+
+func TestDecodeUnicodeEmoji(t *testing.T) {
+	toon := `emoji: "😀🎉🚀"
+name: "Hello"`
+	expected := `{
+  "emoji": "😀🎉🚀",
+  "name": "Hello"
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeUnicodeCJK(t *testing.T) {
+	toon := `chinese: "你好世界"
+japanese: "こんにちは"
+korean: "안녕하세요"`
+	expected := `{
+  "chinese": "你好世界",
+  "japanese": "こんにちは",
+  "korean": "안녕하세요"
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeUnicodeRTL(t *testing.T) {
+	toon := `arabic: "مرحبا بالعالم"
+hebrew: "שלום עולם"`
+	expected := `{
+  "arabic": "مرحبا بالعالم",
+  "hebrew": "שלום עולם"
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeUnicodeInlineArray(t *testing.T) {
+	toon := `languages:[3]: 中文,日本語,한국어`
+	expected := `{
+  "languages": ["中文", "日本語", "한국어"]
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeUnicodeTabularArray(t *testing.T) {
+	toon := `users[2]{name,city}:
+  Alice,北京
+  Bob,東京`
+	expected := `{
+  "users": [
+    {"name": "Alice", "city": "北京"},
+    {"name": "Bob", "city": "東京"}
+  ]
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeUnicodeEmptyString(t *testing.T) {
+	toon := `empty: ""
+emoji: "🎉"
+text: ""`
+	expected := `{
+  "empty": "",
+  "emoji": "🎉",
+  "text": ""
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeUnicodeWithSpecialChars(t *testing.T) {
+	toon := `text: "Café ☕ Naïve"`
+	expected := `{
+  "text": "Café ☕ Naïve"
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+// --- Special Float Values ---
+
+func TestDecodeSpecialFloatValues(t *testing.T) {
+	// Note: Go's JSON standard library does NOT support NaN, Infinity, -Infinity
+	// These are not valid JSON values. Testing what the decoder does with them.
+	tests := []struct {
+		name       string
+		toon       string
+		shouldFail bool
+	}{
+		{"regular float", `value: 3.14`, false},
+		{"negative float", `value: -2.71`, false},
+		{"scientific notation", `value: 1.23e-4`, false},
+		{"large exponent", `value: 1e10`, false},
+		{"zero", `value: 0`, false},
+		{"negative zero", `value: -0`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := DecodeToJSON([]byte(tt.toon))
+			if tt.shouldFail {
+				if err == nil {
+					t.Errorf("Expected error but got: %s", result)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				// Verify it's valid JSON
+				var data interface{}
+				if err := json.Unmarshal(result, &data); err != nil {
+					t.Errorf("Invalid JSON output: %v\nOutput: %s", err, result)
+				}
+			}
+		})
+	}
+}
+
+func TestDecodeFloatPrecision(t *testing.T) {
+	toon := `pi: 3.141592653589793
+e: 2.718281828459045
+phi: 1.618033988749895`
+	expected := `{
+  "pi": 3.141592653589793,
+  "e": 2.718281828459045,
+  "phi": 1.618033988749895
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeVerySmallNumbers(t *testing.T) {
+	toon := `tiny: 1e-100
+smaller: 1e-308`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(result, &data); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+
+	// Verify values are present and numeric
+	if _, ok := data["tiny"].(float64); !ok {
+		t.Errorf("Expected tiny to be float64, got %T", data["tiny"])
+	}
+	if _, ok := data["smaller"].(float64); !ok {
+		t.Errorf("Expected smaller to be float64, got %T", data["smaller"])
+	}
+}
+
+func TestDecodeVeryLargeNumbers(t *testing.T) {
+	toon := `huge: 1e100
+massive: 1e308`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(result, &data); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+
+	// Verify values are present and numeric
+	if _, ok := data["huge"].(float64); !ok {
+		t.Errorf("Expected huge to be float64, got %T", data["huge"])
+	}
+	if _, ok := data["massive"].(float64); !ok {
+		t.Errorf("Expected massive to be float64, got %T", data["massive"])
+	}
+}
+
+// --- Deep Nesting Edge Cases ---
+
+func TestDecodeDeepNesting11Levels(t *testing.T) {
+	toon := `a:
+  b:
+    c:
+      d:
+        e:
+          f:
+            g:
+              h:
+                i:
+                  j:
+                    k: "deep"`
+	expected := `{
+  "a": {
+    "b": {
+      "c": {
+        "d": {
+          "e": {
+            "f": {
+              "g": {
+                "h": {
+                  "i": {
+                    "j": {
+                      "k": "deep"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeDeepNesting20Levels(t *testing.T) {
+	toon := `l1:
+  l2:
+    l3:
+      l4:
+        l5:
+          l6:
+            l7:
+              l8:
+                l9:
+                  l10:
+                    l11:
+                      l12:
+                        l13:
+                          l14:
+                            l15:
+                              l16:
+                                l17:
+                                  l18:
+                                    l19:
+                                      l20: "very deep"`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var data interface{}
+	if err := json.Unmarshal(result, &data); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+
+	// Verify structure is valid
+	if data == nil {
+		t.Error("Expected non-nil data")
+	}
+}
+
+func TestDecodeDeepNestedArray(t *testing.T) {
+	toon := `level1:
+  level2:
+    level3:
+      items:[3]: a,b,c`
+	expected := `{
+  "level1": {
+    "level2": {
+      "level3": {
+        "items": ["a", "b", "c"]
+      }
+    }
+  }
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeDeepNestedTabularArray(t *testing.T) {
+	toon := `root:
+  nested:
+    data[2]{id,value}:
+      1,first
+      2,second`
+	expected := `{
+  "root": {
+    "nested": {
+      "data": [
+        {"id": 1, "value": "first"},
+        {"id": 2, "value": "second"}
+      ]
+    }
+  }
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+// --- Combined Edge Cases ---
+
+func TestDecodeUnicodeDeepNesting(t *testing.T) {
+	toon := `国家:
+  城市:
+    地区:
+      名称: "北京"`
+	expected := `{
+  "国家": {
+    "城市": {
+      "地区": {
+        "名称": "北京"
+      }
+    }
+  }
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeUnicodeWithFloats(t *testing.T) {
+	toon := `数据[3]: 1.5,2.7,3.14`
+	expected := `{
+  "数据": [1.5, 2.7, 3.14]
+}`
+	parseAndVerify(t, toon, expected)
+}
+
+func TestDecodeComplexEdgeCases(t *testing.T) {
+	toon := `metadata:
+  version: 1.0
+  tags:[4]: 中文,日本語,한국어,العربية
+  nested:
+    deep:
+      deeper:
+        value: "🎉"`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(result, &data); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+
+	// Verify structure
+	if data["metadata"] == nil {
+		t.Error("Expected metadata key")
+	}
+	metadata, _ := data["metadata"].(map[string]interface{})
+	if metadata["version"] != float64(1.0) {
+		t.Errorf("Expected version=1.0, got %v", metadata["version"])
+	}
+	if tags, ok := metadata["tags"].([]interface{}); ok {
+		if len(tags) != 4 {
+			t.Errorf("Expected 4 tags, got %d", len(tags))
+		}
+	} else {
+		t.Errorf("Expected tags to be array, got %T", metadata["tags"])
+	}
+}

@@ -3,7 +3,7 @@ package json2toon
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -46,20 +46,8 @@ func (e *Encoder) Flush() error {
 
 func (e *Encoder) encodeValue(v interface{}) error {
 	switch val := v.(type) {
-	case nil:
-		_, err := e.w.WriteString("null")
-		return err
-	case bool:
-		if val {
-			_, err := e.w.WriteString("true")
-			return err
-		}
-		_, err := e.w.WriteString("false")
-		return err
-	case float64:
-		return e.writeNumber(val)
-	case string:
-		return e.writeString(val)
+	case nil, bool, float64, string:
+		return writePrimitiveToWriter(e.w, v, e.opts.Delimiter)
 	case []interface{}:
 		return e.writeArray(val)
 	case map[string]interface{}:
@@ -88,13 +76,6 @@ func (e *Encoder) indent() {
 	if err != nil {
 		return
 	}
-}
-
-func (e *Encoder) writeNumber(n float64) error {
-	// Normalize number per TOON spec
-	s := normalizeNumber(n)
-	_, err := e.w.WriteString(s)
-	return err
 }
 
 func normalizeNumber(n float64) string {
@@ -264,36 +245,6 @@ func (e *Encoder) writeObject(m map[string]interface{}) error {
 		}
 
 		switch val := v.(type) {
-		case nil:
-			_, err = e.w.WriteString(": null")
-			if err != nil {
-				return err
-			}
-		case bool:
-			if val {
-				_, err = e.w.WriteString(": true")
-			} else {
-				_, err = e.w.WriteString(": false")
-			}
-			if err != nil {
-				return err
-			}
-		case float64:
-			_, err = e.w.WriteString(": ")
-			if err != nil {
-				return err
-			}
-			if err := e.writeNumber(val); err != nil {
-				return err
-			}
-		case string:
-			_, err = e.w.WriteString(": ")
-			if err != nil {
-				return err
-			}
-			if err := e.writeString(val); err != nil {
-				return err
-			}
 		case []interface{}:
 			if len(val) == 0 {
 				_, err = e.w.WriteString(":")
@@ -334,12 +285,19 @@ func (e *Encoder) writeObject(m map[string]interface{}) error {
 			}
 			e.depth--
 		default:
+			// Primitives (nil, bool, float64, string) and fallback
 			_, err = e.w.WriteString(": ")
 			if err != nil {
 				return err
 			}
-			if err := e.writeString(formatValue(val)); err != nil {
-				return err
+			if isPrimitive(v) {
+				if err := writePrimitiveToWriter(e.w, v, e.opts.Delimiter); err != nil {
+					return err
+				}
+			} else {
+				if err := e.writeString(formatValue(v)); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -580,7 +538,9 @@ func (e *Encoder) writeArray(arr []interface{}) error {
 					return err
 				}
 			} else if e.isTabular(val) {
-				_, err = e.w.WriteString(val[0].(map[string]interface{})[getFirstKey(val)].(string) + e.formatArrayHeader(val))
+				firstMap, _ := val[0].(map[string]interface{})
+				firstKeyVal, _ := firstMap[getFirstKey(val)].(string)
+				_, err = e.w.WriteString(firstKeyVal + e.formatArrayHeader(val))
 				if err != nil {
 					return err
 				}
@@ -634,6 +594,16 @@ func (e *Encoder) allPrimitives(arr []interface{}) bool {
 }
 
 func (e *Encoder) formatPrimitive(v interface{}, delim string) string {
+	return formatPrimitiveToString(v, rune(delim[0]))
+}
+
+func (e *Encoder) writePrimitive(v interface{}) error {
+	return writePrimitiveToWriter(e.w, v, e.opts.Delimiter)
+}
+
+// formatPrimitiveToString formats a primitive value to its TOON string representation.
+// Used for tabular formatting where nil maps to empty string.
+func formatPrimitiveToString(v interface{}, delimiter rune) string {
 	switch val := v.(type) {
 	case nil:
 		return ""
@@ -645,7 +615,7 @@ func (e *Encoder) formatPrimitive(v interface{}, delim string) string {
 	case float64:
 		return normalizeNumber(val)
 	case string:
-		if needsQuoting(val, rune(delim[0])) {
+		if needsQuoting(val, delimiter) {
 			return `"` + escapeString(val) + `"`
 		}
 		return val
@@ -654,24 +624,32 @@ func (e *Encoder) formatPrimitive(v interface{}, delim string) string {
 	}
 }
 
-func (e *Encoder) writePrimitive(v interface{}) error {
+// writePrimitiveToWriter writes a primitive value to the given writer in TOON format.
+// Used for standalone value contexts where nil maps to "null".
+func writePrimitiveToWriter(w io.Writer, v interface{}, delimiter rune) error {
 	switch val := v.(type) {
 	case nil:
-		_, err := e.w.WriteString("null")
+		_, err := io.WriteString(w, "null")
 		return err
 	case bool:
 		if val {
-			_, err := e.w.WriteString("true")
+			_, err := io.WriteString(w, "true")
 			return err
 		}
-		_, err := e.w.WriteString("false")
+		_, err := io.WriteString(w, "false")
 		return err
 	case float64:
-		return e.writeNumber(val)
+		_, err := io.WriteString(w, normalizeNumber(val))
+		return err
 	case string:
-		return e.writeString(val)
+		if needsQuoting(val, delimiter) {
+			_, err := io.WriteString(w, `"`+escapeString(val)+`"`)
+			return err
+		}
+		_, err := io.WriteString(w, val)
+		return err
 	default:
-		return errors.New("not a primitive value")
+		return fmt.Errorf("not a primitive value: %T", v)
 	}
 }
 

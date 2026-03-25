@@ -1,0 +1,30 @@
+linters:
+  default: none
+  enable:
+    - errcheck      # Check for unchecked errors (critical)
+    - gosimple      # Simplify code
+    - staticcheck   # Static analysis checks
+    - unused        # Checks for unused code
+    - gofmt         # Checks whether code was gofmt-ed
+    - govet         # Reports suspicious constructs
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-closure: true
+  govet:
+    enable-all: true
+    disable:
+      - shadow        # Variable shadowing (style)
+      - fieldalignment # Struct alignment (optimization hint)
+  gocritic:
+    disabled-checks:
+      - ifElseChain        # Style suggestion
+      - offBy1             # False positives in some cases
+      - exitAfterDefer     # Intentional for CLI tools
+      - fieldalignment     # Optimization hint
+      - shadow             # Style suggestion
+
+run:
+  timeout: 5m
+  tests: true

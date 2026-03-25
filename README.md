@@ -218,12 +218,16 @@ make release   # Cross-compile for Linux/macOS/Windows
 ## Benchmarks
 
 ```
-BenchmarkConvertSimple       200000 ns/op     6080 B/op     63 allocs/op
-BenchmarkConvertNested       125000 ns/op     6608 B/op     90 allocs/op
-BenchmarkConvertArray         16000 ns/op    26984 B/op    934 allocs/op
-BenchmarkConvertTabular       3000 ns/op     97368 B/op   3328 allocs/op
-BenchmarkConvertLargeFile      1200 ns/op   360137 B/op  10379 allocs/op
-BenchmarkConvertJSONC         120000 ns/op     6712 B/op     87 allocs/op
+BenchmarkConvertSimple-8          8137 ns/op     6064 B/op      60 allocs/op
+BenchmarkConvertNested-8         11511 ns/op     6576 B/op      87 allocs/op
+BenchmarkConvertArray-8          69058 ns/op    25496 B/op     834 allocs/op
+BenchmarkConvertTabular-8       313393 ns/op    97368 B/op    3328 allocs/op
+BenchmarkConvertLargeFile-8     919854 ns/op   360137 B/op   10379 allocs/op
+BenchmarkConvertJSONC-8          10348 ns/op     6664 B/op      82 allocs/op
+BenchmarkConvertJSONL-8        1720938 ns/op    83922 B/op    1866 allocs/op
+BenchmarkConvertJSONLStream-8    228059 ns/op    95323 B/op    2657 allocs/op
+BenchmarkConvertAuto-8            9513 ns/op     7264 B/op      96 allocs/op
+BenchmarkConvertToJSON-8          8054 ns/op     9678 B/op      40 allocs/op
 ```
 
 ## License

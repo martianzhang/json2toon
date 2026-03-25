@@ -1,5 +1,63 @@
 package json2toon
 
+// json2toon converts JSON/JSONC/JSONL to TOON (Token-Oriented Object Notation) and back.
+//
+// # Features
+//
+//   - Bidirectional conversion between JSON and TOON
+//   - Streaming support for large files
+//   - JSONC support (JavaScript-style comments)
+//   - JSONL support (JSON Lines format)
+//   - Auto-detect input format
+//   - Configurable encoding options (indent, delimiter, key folding)
+//
+// # Quick Start
+//
+//	result, err := json2toon.Convert([]byte(`{"name": "Ada", "age": 30}`))
+//
+// # TOON Format
+//
+// TOON is a human-readable format that represents JSON data using indentation
+// and line-based syntax:
+//
+//	JSON: {"name": "Ada", "scores": [95, 87, 92]}
+//	TOON:
+//	  name: Ada
+//	  scores: [3]: 95,87,92
+//
+// For detailed format specification, see https://toonformat.dev
+//
+// # Error Handling
+//
+// All functions return errors that can be inspected. Decoder errors include
+// context information (line numbers, input snippets) for easier debugging.
+//
+// # Thread Safety
+//
+// Encoder and Decoder are not thread-safe. Create separate instances for
+// concurrent use.
+//
+// # Example
+//
+//	package main
+//
+//	import (
+//		"fmt"
+//		"github.com/martianzhang/json2toon"
+//	)
+//
+//	func main() {
+//		json := `{"name": "Ada", "active": true}`
+//		result, err := json2toon.Convert([]byte(json))
+//		if err != nil {
+//			panic(err)
+//		}
+//		fmt.Println(string(result))
+//	}
+//
+// # See Also
+//
+// For TOON format specification: https://toonformat.dev
 import (
 	"bytes"
 	"io"

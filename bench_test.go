@@ -171,3 +171,75 @@ func BenchmarkEncoderOptions(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkConvertJSONL(b *testing.B) {
+	// Generate JSONL with 50 lines
+	var buf bytes.Buffer
+	for i := 0; i < 50; i++ {
+		if i > 0 {
+			buf.WriteString("\n")
+		}
+		buf.WriteString(`{"id":`)
+		buf.WriteString(string(rune('0' + (i % 10))))
+		buf.WriteString(`,"name":"Item`)
+		buf.WriteString(string(rune('0' + (i % 10))))
+		buf.WriteString(`","active":true}`)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertJSONL(buf.Bytes())
+	}
+}
+
+func BenchmarkConvertJSONLStream(b *testing.B) {
+	// Generate JSONL with 50 lines
+	var buf bytes.Buffer
+	for i := 0; i < 50; i++ {
+		if i > 0 {
+			buf.WriteString("\n")
+		}
+		buf.WriteString(`{"id":`)
+		buf.WriteString(string(rune('0' + (i % 10))))
+		buf.WriteString(`,"name":"Item`)
+		buf.WriteString(string(rune('0' + (i % 10))))
+		buf.WriteString(`","active":true}`)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertJSONLStream(buf.Bytes())
+	}
+}
+
+func BenchmarkConvertAuto(b *testing.B) {
+	// Test with JSON (auto-detect should identify as JSON)
+	json := []byte(`{"id": 123, "name": "Ada", "items": [{"id": 1}, {"id": 2}]}`)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertAuto(json)
+	}
+}
+
+func BenchmarkConvertToJSON(b *testing.B) {
+	// First convert JSON to TOON
+	json := []byte(`{"id": 123, "name": "Ada", "active": true, "items": ["a", "b", "c"]}`)
+	toon, _ := Convert(json)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertToJSON(toon)
+	}
+}
+
+func BenchmarkConvertToJSONFromReader(b *testing.B) {
+	// First convert JSON to TOON
+	json := []byte(`{"id": 123, "name": "Ada", "active": true, "items": ["a", "b", "c"]}`)
+	toon, _ := Convert(json)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertToJSONFromReader(bytes.NewReader(toon))
+	}
+}

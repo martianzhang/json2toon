@@ -10,6 +10,50 @@ import (
 	"strings"
 )
 
+// DecoderError represents a decoding error with context information.
+type DecoderError struct {
+	Type    string // Error type (e.g., "InvalidSyntax", "CountMismatch")
+	Message string // Human-readable error message
+	Line    int    // Line number (1-indexed, 0 if unknown)
+	Column  int    // Column position (1-indexed, 0 if unknown)
+	Context string // Input snippet for context
+}
+
+// Error implements the error interface.
+func (e *DecoderError) Error() string {
+	if e.Line > 0 {
+		if e.Column > 0 {
+			return fmt.Sprintf("%s at line %d, column %d: %s", e.Type, e.Line, e.Column, e.Message)
+		}
+		return fmt.Sprintf("%s at line %d: %s", e.Type, e.Line, e.Message)
+	}
+	return fmt.Sprintf("%s: %s", e.Type, e.Message)
+}
+
+// Unwrap returns the underlying error (for error wrapping compatibility).
+func (e *DecoderError) Unwrap() error {
+	return nil
+}
+
+// NewDecoderError creates a new DecoderError with context.
+func NewDecoderError(errType, message string) *DecoderError {
+	return &DecoderError{
+		Type:    errType,
+		Message: message,
+	}
+}
+
+// NewDecoderErrorWithContext creates a DecoderError with line/column context.
+func NewDecoderErrorWithContext(errType, message string, line, column int, context string) *DecoderError {
+	return &DecoderError{
+		Type:    errType,
+		Message: message,
+		Line:    line,
+		Column:  column,
+		Context: context,
+	}
+}
+
 // Decoder reads TOON format and converts to JSON.
 type Decoder struct {
 	r           *bufio.Reader
@@ -25,6 +69,7 @@ type DecoderOptions struct {
 }
 
 // NewDecoder creates a new Decoder reading from r.
+// The decoder will use a default indent of 2 spaces and strict validation.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		r:      bufio.NewReader(r),
@@ -34,6 +79,7 @@ func NewDecoder(r io.Reader) *Decoder {
 }
 
 // NewDecoderWithOptions creates a new Decoder with custom options.
+// Use DefaultDecodeOptions() as a starting point and modify as needed.
 func NewDecoderWithOptions(r io.Reader, opts DecodeOptions) *Decoder {
 	return &Decoder{
 		r:           bufio.NewReader(r),
@@ -44,6 +90,15 @@ func NewDecoderWithOptions(r io.Reader, opts DecodeOptions) *Decoder {
 }
 
 // Decode reads TOON from the reader and returns a JSON-compatible value.
+// The returned value will be one of:
+//   - map[string]interface{} for objects
+//   - []interface{} for arrays
+//   - string, float64, bool, or nil for primitives
+//
+// Returns (nil, nil) if the input is empty.
+//
+// On error, the returned error will be a *DecoderError with context information
+// including line numbers when available.
 func (d *Decoder) Decode() (interface{}, error) {
 	scanner := bufio.NewScanner(d.r)
 	var allLines []string
@@ -213,13 +268,21 @@ func (d *Decoder) parseInlineArray(line string) (string, []interface{}, error) {
 		// "[N]: values" format - find closing ]
 		if endIdx := strings.Index(trimmedRest, "]"); endIdx > 0 {
 			countStr := trimmedRest[1:endIdx]
-			if c, err := strconv.Atoi(countStr); err == nil {
-				count = c
+			c, err := strconv.Atoi(countStr)
+			if err != nil {
+				// Invalid count format
+				return "", nil, NewDecoderError("InvalidSyntax",
+					fmt.Sprintf("invalid array count format: %q", countStr))
 			}
+			count = c
 			rest = strings.TrimSpace(trimmedRest[endIdx+1:])
 			if strings.HasPrefix(rest, ":") {
 				rest = strings.TrimSpace(rest[1:])
 			}
+		} else {
+			// Unclosed bracket
+			return "", nil, NewDecoderError("UnclosedBracket",
+				"unclosed bracket in array count specification")
 		}
 	} else if idx := strings.Index(key, "["); idx >= 0 {
 		// "key[N]:" format
@@ -227,9 +290,13 @@ func (d *Decoder) parseInlineArray(line string) (string, []interface{}, error) {
 		countStr := strings.TrimSpace(key[idx+1:])
 		if countStr != "" {
 			countStr = strings.TrimSuffix(countStr, "]")
-			if c, err := strconv.Atoi(countStr); err == nil {
-				count = c
+			c, err := strconv.Atoi(countStr)
+			if err != nil {
+				// Invalid count format
+				return "", nil, NewDecoderError("InvalidSyntax",
+					fmt.Sprintf("invalid array count format: %q", countStr))
 			}
+			count = c
 		}
 		key = keyName
 	}
@@ -238,7 +305,9 @@ func (d *Decoder) parseInlineArray(line string) (string, []interface{}, error) {
 
 	// Validate count if specified and not zero (empty array)
 	if count > 0 && len(values) != count {
-		return "", nil, fmt.Errorf("inline array count mismatch: expected %d, got %d", count, len(values))
+		err := NewDecoderError("CountMismatch",
+			fmt.Sprintf("inline array count mismatch: expected %d, got %d", count, len(values)))
+		return "", nil, err
 	}
 
 	return key, values, nil
@@ -735,7 +804,7 @@ func setNestedValue(root map[string]interface{}, path []string, value interface{
 	if !ok {
 		// Can't expand into a non-map value, overwrite it
 		root[path[0]] = make(map[string]interface{})
-		nested = root[path[0]].(map[string]interface{})
+		nested, _ = root[path[0]].(map[string]interface{})
 	}
 	setNestedValue(nested, path[1:], value)
 }
