@@ -1,0 +1,11 @@
+id: 12345
+name: Test Project
+version: 1.0.0
+active: true
+nullable: null
+config:
+  debug: false
+  logLevel: info
+  maxRetries: 3
+  timeout: 30.5
+tags:[3]: json,toon,converter

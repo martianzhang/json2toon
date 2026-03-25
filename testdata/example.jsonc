@@ -1,0 +1,14 @@
+// Configuration file example
+{
+  // Server settings
+  "server": {
+    "host": "localhost",
+    "port": 8080
+  },
+  /* Database connection
+     with multiple settings */
+  "database": {
+    "url": "postgres://localhost:5432/mydb",
+    "maxConnections": 10
+  }
+}

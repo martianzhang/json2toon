@@ -1,15 +1,12 @@
 # Binaries
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+bin/
 
 # Test binary
 *.test
 
 # Output of go coverage
 *.out
+!testdata/*.out
 
 # IDE
 .idea/
@@ -21,6 +18,7 @@
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Go workspace
 go.work

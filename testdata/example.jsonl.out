@@ -1,0 +1,4 @@
+[3]{active,id,name}:
+  true,1,Alice
+  false,2,Bob
+  true,3,Charlie

@@ -1,0 +1,36 @@
+{
+  "id": 12345,
+  "name": "Test Project",
+  "version": "1.0.0",
+  "active": true,
+  "nullable": null,
+  "config": {
+    "debug": false,
+    "logLevel": "info",
+    "maxRetries": 3,
+    "timeout": 30.5
+  },
+  "tags": ["json", "toon", "converter"],
+  "users": [
+    {
+      "id": 1,
+      "name": "Alice",
+      "email": "alice@example.com",
+      "roles": ["admin", "developer"]
+    },
+    {
+      "id": 2,
+      "name": "Bob",
+      "email": "bob@example.com",
+      "roles": ["viewer"]
+    }
+  ],
+  "metadata": {
+    "created": "2024-01-15T10:30:00Z",
+    "updated": "2024-01-20T14:45:00Z",
+    "author": {
+      "name": "John Doe",
+      "github": "johndoe"
+    }
+  }
+}
