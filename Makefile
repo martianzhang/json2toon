@@ -1,4 +1,4 @@
-.PHONY: bin fmt lint test test-cli test-cover build release clean
+.PHONY: fmt lint test test-cli test-cover build release clean
 
 GOOS := $(shell go env GOOS)
 GOPATH := $(shell go env GOPATH)
@@ -8,7 +8,7 @@ else
   EXE :=
 endif
 
-build: fmt bin
+build: fmt
 	go build -o bin/j2t$(EXE) ./cmd/j2t
 
 fmt:
@@ -21,24 +21,18 @@ lint:
 test: fmt
 	go test ./...
 
-test-cli: build
-	go test -v ./cmd/j2t/...
-
-test-cover:
+cover:
 	go test -coverprofile=cover.out ./...
-	go tool cover -func=cover.out
+	@echo "--- Total Coverage ---"
+	@go tool cover -func=cover.out | grep -E '^total:' | grep -o '[0-9]*\.[0-9]*%' || echo "N/A"
 	@echo "--- HTML report ---"
 	go tool cover -html=cover.out -o cover.html
 
-test-cover-ci:
-	go test -coverprofile=cover.out ./...
-
-release: fmt bin
+release: fmt
 	GOOS=linux GOARCH=amd64 go build -o bin/j2t-linux-amd64 ./cmd/j2t
 	GOOS=darwin GOARCH=amd64 go build -o bin/j2t-darwin-amd64 ./cmd/j2t
 	GOOS=darwin GOARCH=arm64 go build -o bin/j2t-darwin-arm64 ./cmd/j2t
 	GOOS=windows GOARCH=amd64 go build -o bin/j2t.exe ./cmd/j2t
 
 clean:
-	rm -f cover.out cover.html
 	git clean -fdx

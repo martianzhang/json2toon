@@ -1,5 +1,6 @@
 # Binaries
 bin/
+*.exe
 
 # Test binary
 *.test
