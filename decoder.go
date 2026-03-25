@@ -12,8 +12,16 @@ import (
 
 // Decoder reads TOON format and converts to JSON.
 type Decoder struct {
-	r      *bufio.Reader
-	indent int
+	r           *bufio.Reader
+	indent      int
+	strict      bool
+	expandPaths bool
+}
+
+// DecoderOptions holds decoder configuration.
+type DecoderOptions struct {
+	Strict      bool
+	ExpandPaths bool
 }
 
 // NewDecoder creates a new Decoder reading from r.
@@ -21,6 +29,17 @@ func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		r:      bufio.NewReader(r),
 		indent: 2,
+		strict: true,
+	}
+}
+
+// NewDecoderWithOptions creates a new Decoder with custom options.
+func NewDecoderWithOptions(r io.Reader, opts DecodeOptions) *Decoder {
+	return &Decoder{
+		r:           bufio.NewReader(r),
+		indent:      2,
+		strict:      opts.Strict,
+		expandPaths: opts.ExpandPaths,
 	}
 }
 
@@ -648,4 +667,71 @@ func DecodeFromReader(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	return json.MarshalIndent(value, "", "  ")
+}
+
+// DecodeToJSONWithOptions converts TOON to JSON with custom options.
+func DecodeToJSONWithOptions(toon []byte, opts DecodeOptions) ([]byte, error) {
+	decoder := NewDecoderWithOptions(bytes.NewReader(toon), opts)
+	value, err := decoder.Decode()
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply path expansion if enabled
+	if decoder.expandPaths {
+		value = expandPaths(value)
+	}
+
+	return json.MarshalIndent(value, "", "  ")
+}
+
+// expandPaths expands dotted keys into nested objects.
+// For example: {"a.b.c": "value"} -> {"a": {"b": {"c": "value"}}}
+func expandPaths(value interface{}) interface{} {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for k, val := range v {
+			if strings.Contains(k, ".") {
+				// Expand the key
+				parts := strings.Split(k, ".")
+				setNestedValue(result, parts, expandPaths(val))
+			} else {
+				result[k] = expandPaths(val)
+			}
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = expandPaths(item)
+		}
+		return result
+	default:
+		return v
+	}
+}
+
+// setNestedValue sets a value at a nested path, creating intermediate objects as needed.
+// path ["a", "b", "c"] with value "v" -> {"a": {"b": {"c": "v"}}}
+func setNestedValue(root map[string]interface{}, path []string, value interface{}) {
+	if len(path) == 0 {
+		return
+	}
+	if len(path) == 1 {
+		root[path[0]] = value
+		return
+	}
+
+	// Get or create the nested map
+	if _, exists := root[path[0]]; !exists {
+		root[path[0]] = make(map[string]interface{})
+	}
+	nested, ok := root[path[0]].(map[string]interface{})
+	if !ok {
+		// Can't expand into a non-map value, overwrite it
+		root[path[0]] = make(map[string]interface{})
+		nested = root[path[0]].(map[string]interface{})
+	}
+	setNestedValue(nested, path[1:], value)
 }

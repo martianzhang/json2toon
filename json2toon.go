@@ -314,3 +314,45 @@ func ConvertToJSONFileString(path string) (string, error) {
 	}
 	return string(result), nil
 }
+
+// --- Decoder Options ---
+
+// DecoderOption configures the decoder behavior.
+type DecodeOption func(*DecodeOptions)
+
+// DecodeOptions holds decoder configuration.
+type DecodeOptions struct {
+	Strict      bool
+	ExpandPaths bool
+}
+
+// DefaultDecodeOptions returns the default decoder options.
+func DefaultDecodeOptions() DecodeOptions {
+	return DecodeOptions{
+		Strict:      true,
+		ExpandPaths: false,
+	}
+}
+
+// WithDecodeStrict enables or disables strict validation when decoding.
+func WithDecodeStrict(strict bool) DecodeOption {
+	return func(opts *DecodeOptions) {
+		opts.Strict = strict
+	}
+}
+
+// WithExpandPaths enables path expansion for reconstructing nested structures from folded keys.
+func WithExpandPaths(expand bool) DecodeOption {
+	return func(opts *DecodeOptions) {
+		opts.ExpandPaths = expand
+	}
+}
+
+// ConvertToJSONWithOptions converts TOON to JSON with custom options.
+func ConvertToJSONWithOptions(toonBytes []byte, opts ...DecodeOption) ([]byte, error) {
+	options := DefaultDecodeOptions()
+	for _, opt := range opts {
+		opt(&options)
+	}
+	return DecodeToJSONWithOptions(toonBytes, options)
+}

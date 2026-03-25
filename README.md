@@ -40,16 +40,24 @@ echo '{"id": 1}' | j2t
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `-o` | stdout | Output file path |
+| `-e` | auto | Force encode mode (JSON to TOON) |
+| `-d, -r` | auto | Decode mode: convert TOON to JSON |
 | `-indent` | `2` | Spaces per indentation level |
 | `-delimiter` | `,` | Table delimiter (`,`, `\t`, `\|`) |
-| `-key-folding` | `""` | Key folding mode (`""`, `"safe"`, `"upper"`, `"lower"`) |
+| `-key-folding` | `off` | Key folding mode (`off`, `safe`) |
 | `-strict` | `false` | Enable strict TOON validation |
 | `-stream` | `false` | Enable streaming mode for JSONL (line-by-line processing) |
-| `-r` | `false` | Reverse mode: convert TOON to JSON instead of JSON to TOON |
+| `--stats` | `false` | Show token count estimates and savings |
+| `--expandPaths` | `off` | Path expansion mode (`off`, `safe`) |
+
+### File Extension Detection
+
+The CLI auto-detects operation based on file extension:
+- `.json`, `.jsonc`, `.jsonl` → encode (JSON to TOON)
+- `.toon` → decode (TOON to JSON)
 
 ### Using with jq
-
-The `-stream` flag enables processing line-by-line output, which is useful when combined with `jq`:
 
 ```bash
 # Convert JSONL by merging lines into array first
@@ -62,8 +70,17 @@ cat data.jsonl | jq -c '.' | j2t -stream
 echo 'id: 123' | j2t -r
 # Output: { "id": 123 }
 
-# Convert TOON file to JSON
-j2t -r config.toon > config.json
+# Convert TOON file to JSON (auto-detected from .toon extension)
+j2t config.toon -o config.json
+
+# Token statistics
+j2t data.json --stats
+
+# Output to file
+j2t config.json -o config.toon
+
+# Path expansion for lossless round-trip with key folding
+j2t compressed.toon --expandPaths safe -o output.json
 ```
 
 ## Library Quick Start

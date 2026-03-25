@@ -239,7 +239,8 @@ func isNumericLike(s string) bool {
 
 func (e *Encoder) writeObject(m map[string]interface{}) error {
 	// Check if we can flatten
-	if e.opts.KeyFolding == "safe" && e.depth < e.opts.FlattenDepth {
+	// FlattenDepth of 0 means unlimited
+	if e.opts.KeyFolding == "safe" && (e.opts.FlattenDepth == 0 || e.depth < e.opts.FlattenDepth) {
 		if folded, ok := e.tryFold(m); ok {
 			_, err := e.w.WriteString(folded)
 			return err
