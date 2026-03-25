@@ -1222,14 +1222,16 @@ func TestConvertFileWithOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	defer func() { _ = tmp.Close() }()
 
 	_, err = tmp.WriteString(`{"test": 123}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := ConvertFileWithOptions(tmp.Name(), WithIndent(4))
 	if err != nil {
@@ -1321,8 +1323,12 @@ func TestAllPrimitivesInConverter(t *testing.T) {
 func TestConverterDoubleClose(t *testing.T) {
 	var buf bytes.Buffer
 	conv := NewConverter(&buf)
-	conv.Close()
-	conv.Close() // Should not panic
+	if err := conv.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := conv.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // --- Converter: writeArrayDirect with primitives ---
@@ -1866,13 +1872,15 @@ func TestConvertAutoFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 
 	_, err = tmp.WriteString(`{"test": 123}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := ConvertAutoFile(tmp.Name())
 	if err != nil {
@@ -1888,13 +1896,15 @@ func TestConvertAutoFileJSONC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 
 	_, err = tmp.WriteString(`{"id": 1} // comment`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := ConvertAutoFile(tmp.Name())
 	if err != nil {

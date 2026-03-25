@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -243,23 +242,4 @@ func TestConvertAutoFile(t *testing.T) {
 	if !bytes.Contains(result, []byte("id")) {
 		t.Errorf("missing id in output: %s", result)
 	}
-}
-
-// Helper to capture stdout for testing output behavior
-func captureStdout(fn func()) (string, error) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	fn()
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, err := io.Copy(&buf, r)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
