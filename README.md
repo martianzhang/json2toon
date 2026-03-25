@@ -1,9 +1,10 @@
 # json2toon
 
-JSON/JSONC/JSONL to TOON converter library written in Go.
+JSON/JSONC/JSONL to TOON (and back) converter library written in Go.
 
 ## Features
 
+- **Bidirectional conversion** - Convert JSON to TOON and back
 - **Streaming support** - Token-based JSON parsing for large files
 - **JSONC support** - Handles `//` and `/* */` comments before parsing
 - **JSONL support** - Auto-detects and converts JSON Lines format
@@ -44,6 +45,7 @@ echo '{"id": 1}' | j2t
 | `-key-folding` | `""` | Key folding mode (`""`, `"safe"`, `"upper"`, `"lower"`) |
 | `-strict` | `false` | Enable strict TOON validation |
 | `-stream` | `false` | Enable streaming mode for JSONL (line-by-line processing) |
+| `-r` | `false` | Reverse mode: convert TOON to JSON instead of JSON to TOON |
 
 ### Using with jq
 
@@ -55,6 +57,13 @@ cat data.jsonl | jq -s '.' | j2t
 
 # Convert each JSONL object individually (keeps objects separate)
 cat data.jsonl | jq -c '.' | j2t -stream
+
+# Reverse conversion: TOON to JSON
+echo 'id: 123' | j2t -r
+# Output: { "id": 123 }
+
+# Convert TOON file to JSON
+j2t -r config.toon > config.json
 ```
 
 ## Library Quick Start
@@ -114,6 +123,22 @@ result, err := json2toon.ConvertJSONL(jsonLines)
 result, err := json2toon.ConvertJSONLStream(jsonLines)
 ```
 
+### Reverse Conversion (TOON to JSON)
+
+```go
+// TOON bytes to JSON bytes
+result, err := json2toon.ConvertToJSON(toonBytes)
+
+// TOON string to JSON string
+result, err := json2toon.ConvertToJSONString(toonStr)
+
+// TOON from reader to JSON bytes
+result, err := json2toon.ConvertToJSONFromReader(reader)
+
+// TOON file to JSON bytes
+result, err := json2toon.ConvertToJSONFile("config.toon")
+```
+
 ### Streaming
 
 ```go
@@ -155,8 +180,20 @@ TOON (Token-Oriented Object Notation) is a line-oriented, indentation-based form
 | JSON | TOON |
 |------|------|
 | `{"id": 1}` | `id: 1` |
-| `{"items": [1,2,3]}` | `items[3]: 1,2,3` |
+| `{"items": [1,2,3]}` | `items:[3]: 1,2,3` |
 | `[{"id":1},{"id":2}]` | `[2]{id}:\n  1\n  2` |
+
+### Round-trip Conversion
+
+You can convert between JSON and TOON bidirectionally:
+
+```go
+// JSON → TOON
+toon, _ := json2toon.Convert(jsonBytes)
+
+// TOON → JSON
+json, _ := json2toon.ConvertToJSON(toon)
+```
 
 ## Makefile Targets
 

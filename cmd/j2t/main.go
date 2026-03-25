@@ -1,8 +1,9 @@
-// j2t converts JSON/JSONC/JSONL to TOON format.
+// j2t converts JSON/JSONC/JSONL to TOON format (and vice versa with -r).
 //
 // Usage:
 //
 //	j2t [options] [file]
+//	j2t -r [options] [file]
 //
 // If no file is specified, reads from stdin.
 // Automatically detects format based on content:
@@ -26,6 +27,7 @@ func main() {
 		keyFolding string
 		strict     bool
 		stream     bool
+		reverse    bool
 	)
 
 	flag.IntVar(&indent, "indent", 2, "indentation spaces")
@@ -33,22 +35,30 @@ func main() {
 	flag.StringVar(&keyFolding, "key-folding", "", "key folding mode (empty, \"safe\", \"upper\", \"lower\")")
 	flag.BoolVar(&strict, "strict", false, "strict mode")
 	flag.BoolVar(&stream, "stream", false, "enable streaming mode for JSONL (line-by-line processing)")
+	flag.BoolVar(&reverse, "r", false, "reverse: convert TOON to JSON")
 	flag.Usage = func() {
-		_, _ = fmt.Fprintf(flag.CommandLine.Output(), `j2t - JSON to TOON converter
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), `j2t - JSON/TOON converter
 
 Usage:
-  j2t [options] [file]
+  j2t [options] [file]        # JSON/JSONC/JSONL -> TOON
+  j2t -r [options] [file]      # TOON -> JSON
 
 Options:
 `)
 		flag.PrintDefaults()
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(), `
 Examples:
+  # JSON to TOON
   echo '{"id": 1}' | j2t
   j2t config.json
-  j2t config.jsonc
-  j2t data.jsonl
-  echo '["a","b"]' | jq -r '.[]' | j2t -stream
+
+  # JSONL with jq
+  cat data.jsonl | jq -s '.' | j2t
+  cat data.jsonl | jq -c '.' | j2t -stream
+
+  # TOON to JSON (reverse)
+  echo "id: 1" | j2t -r
+  j2t -r config.toon
 `)
 	}
 	flag.Parse()
@@ -76,31 +86,37 @@ Examples:
 		os.Exit(1)
 	}
 
-	opts := []json2toon.ConverterOption{
-		json2toon.WithIndent(indent),
-	}
-	if delimiter != "," {
-		if len(delimiter) != 1 {
-			fmt.Fprintln(os.Stderr, "Error: delimiter must be a single character")
-			os.Exit(1)
-		}
-		opts = append(opts, json2toon.WithDelimiter(rune(delimiter[0])))
-	}
-	if keyFolding != "" {
-		opts = append(opts, json2toon.WithKeyFolding(keyFolding))
-	}
-	if strict {
-		opts = append(opts, json2toon.WithStrict(strict))
-	}
-
 	var result []byte
 
-	if stream {
-		// Streaming mode: process input line-by-line
-		result, err = json2toon.ConvertJSONLStreamWithOptions(data, opts...)
+	if reverse {
+		// Reverse mode: TOON to JSON
+		result, err = json2toon.ConvertToJSON(data)
 	} else {
-		// Auto-detect format and convert using library function
-		result, err = json2toon.ConvertAutoWithOptions(data, opts...)
+		// Forward mode: JSON/JSONC/JSONL to TOON
+		opts := []json2toon.ConverterOption{
+			json2toon.WithIndent(indent),
+		}
+		if delimiter != "," {
+			if len(delimiter) != 1 {
+				fmt.Fprintln(os.Stderr, "Error: delimiter must be a single character")
+				os.Exit(1)
+			}
+			opts = append(opts, json2toon.WithDelimiter(rune(delimiter[0])))
+		}
+		if keyFolding != "" {
+			opts = append(opts, json2toon.WithKeyFolding(keyFolding))
+		}
+		if strict {
+			opts = append(opts, json2toon.WithStrict(strict))
+		}
+
+		if stream {
+			// Streaming mode: process input line-by-line
+			result, err = json2toon.ConvertJSONLStreamWithOptions(data, opts...)
+		} else {
+			// Auto-detect format and convert using library function
+			result, err = json2toon.ConvertAutoWithOptions(data, opts...)
+		}
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error converting: %v\n", err)

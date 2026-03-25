@@ -279,3 +279,38 @@ func ConvertAutoFile(path string) ([]byte, error) {
 	}
 	return ConvertAuto(data)
 }
+
+// --- TOON to JSON (Reverse Conversion) ---
+
+// ConvertToJSON converts TOON bytes to JSON bytes.
+func ConvertToJSON(toonBytes []byte) ([]byte, error) {
+	return DecodeToJSON(toonBytes)
+}
+
+// ConvertToJSONString converts TOON string to JSON string.
+func ConvertToJSONString(toonStr string) (string, error) {
+	return DecodeToJSONString(toonStr)
+}
+
+// ConvertToJSONFromReader converts TOON from an io.Reader to JSON bytes.
+func ConvertToJSONFromReader(r io.Reader) ([]byte, error) {
+	return DecodeFromReader(r)
+}
+
+// ConvertToJSONFile converts a TOON file to JSON bytes.
+func ConvertToJSONFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeToJSON(data)
+}
+
+// ConvertToJSONFileString converts a TOON file to JSON string.
+func ConvertToJSONFileString(path string) (string, error) {
+	result, err := ConvertToJSONFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}

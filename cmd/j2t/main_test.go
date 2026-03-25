@@ -32,15 +32,6 @@ func splitIntoBlocks(data []byte) [][]string {
 	return blocks
 }
 
-// leadingSpaces returns the number of leading spaces in a line.
-func leadingSpaces(line string) int {
-	i := 0
-	for i < len(line) && line[i] == ' ' {
-		i++
-	}
-	return i
-}
-
 // compareBlock compares two blocks by checking they have the same lines (order-independent).
 func compareBlock(t *testing.T, expBlock, actBlock []string) bool {
 	if len(expBlock) != len(actBlock) {
@@ -113,17 +104,17 @@ func TestCLI(t *testing.T) {
 		{
 			name:     "JSON",
 			input:    "testdata/example.json",
-			expected: "testdata/example.json.out",
+			expected: "testdata/example.toon",
 		},
 		{
 			name:     "JSONC",
 			input:    "testdata/example.jsonc",
-			expected: "testdata/example.jsonc.out",
+			expected: "testdata/example_jsonc.toon",
 		},
 		{
 			name:     "JSONL",
 			input:    "testdata/example.jsonl",
-			expected: "testdata/example.jsonl.out",
+			expected: "testdata/example_jsonl.toon",
 		},
 	}
 
