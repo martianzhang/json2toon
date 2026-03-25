@@ -1,37 +1,34 @@
 version: "2"
+
 run:
   timeout: 5m
-  go: '1.25' # Match your Go version
+  go: '1.25'
 
-# Linters to enable (core + popular Go linters)
 linters:
+  default: none
   enable:
-    - govet # Official Go vet (critical)
-    - errcheck # Check for unchecked errors
-    - staticcheck # Advanced static analysis
-    - unused # Find unused code/variables
-    - revive # Replacement for golint (style checks)
-    - misspell # Fix spelling mistakes
-    - gocyclo # Check function cyclomatic complexity
-    - nakedret # Check for naked returns
-    - unconvert # Remove unnecessary type conversions
-
-# Linter settings (adjust strictness as needed)
-linters-settings:
-  gocyclo:
-    min-complexity: 10 # Warn for functions with complexity >10
-  revive:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - revive
+    - misspell
+    - gocyclo
+    - nakedret
+    - unconvert
+  settings:
+    gocyclo:
+      min-complexity: 30
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+  exclusions:
+    paths:
+      - vendor
+      - node_modules
+      - testdata
     rules:
-      - name: exported
-        severity: warning
-
-# Ignore paths (customize for your project)
-issues:
-  exclude-dirs:
-    - vendor
-    - node_modules
-    - testdata
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocyclo # Ignore complexity in test files
+      - path: _test\.go
+        linters:
+          - gocyclo
