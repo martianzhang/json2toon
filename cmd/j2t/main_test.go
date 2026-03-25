@@ -204,13 +204,15 @@ func TestConvertFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 
 	_, err = tmp.WriteString(`{"test": 123}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := json2toon.ConvertFile(tmp.Name())
 	if err != nil {
@@ -227,13 +229,15 @@ func TestConvertAutoFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 
 	_, err = tmp.WriteString(`{"id": 1} // comment`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := json2toon.ConvertAutoFile(tmp.Name())
 	if err != nil {
