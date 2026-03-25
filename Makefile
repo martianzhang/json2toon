@@ -1,6 +1,7 @@
-.PHONY: bin fmt test test-cli build release clean
+.PHONY: bin fmt lint test test-cli build release clean
 
 GOOS := $(shell go env GOOS)
+GOPATH := $(shell go env GOPATH)
 ifeq ($(GOOS),windows)
   EXE := .exe
 else
@@ -13,8 +14,9 @@ build: fmt bin
 fmt:
 	go fmt ./...
 
-bin:
-	-@mkdir bin
+lint:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	$(GOPATH)/bin/golangci-lint run
 
 test: fmt
 	go test ./...
