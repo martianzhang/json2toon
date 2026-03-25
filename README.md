@@ -2,6 +2,8 @@
 
 JSON/JSONC/JSONL to TOON (and back) converter library written in Go.
 
+**[godoc](https://pkg.go.dev/github.com/martianzhang/json2toon) · [TOON Format](https://toonformat.dev) · [Format Overview](https://toonformat.dev/guide/format-overview.html)**
+
 ## Features
 
 - **Bidirectional conversion** - Convert JSON to TOON and back
@@ -42,19 +44,20 @@ echo '{"id": 1}' | j2t
 |------|---------|-------------|
 | `-o` | stdout | Output file path |
 | `-e` | auto | Force encode mode (JSON to TOON) |
-| `-d, -r` | auto | Decode mode: convert TOON to JSON |
+| `-d`, `-r` | auto | Force decode mode (TOON to JSON) |
 | `-indent` | `2` | Spaces per indentation level |
 | `-delimiter` | `,` | Table delimiter (`,`, `\t`, `\|`) |
-| `-key-folding` | `off` | Key folding mode (`off`, `safe`) |
+| `-key-folding` | (none) | Key folding mode (`off`, `safe`) |
 | `-strict` | `false` | Enable strict TOON validation |
-| `-stream` | `false` | Enable streaming mode for JSONL (line-by-line processing) |
+| `-stream` | `false` | Streaming mode for JSONL (line-by-line, memory-efficient) |
 | `--stats` | `false` | Show token count estimates and savings |
-| `--expandPaths` | `off` | Path expansion mode (`off`, `safe`) |
+| `--expandPaths` | (none) | Path expansion mode on decode (`off`, `safe`) |
 
 ### File Extension Detection
 
 The CLI auto-detects operation based on file extension:
-- `.json`, `.jsonc`, `.jsonl` → encode (JSON to TOON)
+
+- `.json`, `.jsonc`, `.jsonl`, `.jsonl.gz` → encode (JSON to TOON)
 - `.toon` → decode (TOON to JSON)
 
 ### Using with jq
@@ -89,21 +92,22 @@ j2t compressed.toon --expandPaths safe -o output.json
 package main
 
 import (
-    "fmt"
-    "github.com/martianzhang/json2toon"
+	"fmt"
+	"github.com/martianzhang/json2toon"
 )
 
 func main() {
-    json := `{"id": 123, "name": "Ada", "active": true}`
-    result, err := json2toon.Convert([]byte(json))
-    if err != nil {
-        panic(err)
-    }
-    fmt.Println(string(result))
+	json := `{"id": 123, "name": "Ada", "active": true}`
+	result, err := json2toon.Convert([]byte(json))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(result))
 }
 ```
 
 Output:
+
 ```toon
 id: 123
 name: Ada
@@ -112,7 +116,9 @@ active: true
 
 ## API Reference
 
-### Basic Conversion
+For complete documentation, see the **[godoc](https://pkg.go.dev/github.com/martianzhang/json2toon)**.
+
+### Basic Conversion (JSON → TOON)
 
 ```go
 // JSON bytes to TOON bytes
@@ -121,26 +127,40 @@ result, err := json2toon.Convert(jsonBytes)
 // JSON string to TOON string
 result, err := json2toon.ConvertString(jsonStr)
 
-// JSONC (with comments) to TOON
-result, err := json2toon.ConvertJSONC(jsoncBytes)
-
-// JSONC string to TOON string
-result, err := json2toon.ConvertJSONCString(jsoncStr)
-
-// Convert file (auto-detects JSON/JSONC/JSONL)
+// Convert JSON file to TOON bytes
 result, err := json2toon.ConvertFile("config.json")
 
-// Convert file to writer
+// Convert JSON file and write directly to an io.Writer
 err := json2toon.ConvertFileToWriter("config.json", writer)
-
-// JSON Lines to TOON
-result, err := json2toon.ConvertJSONL(jsonLines)
-
-// Streaming JSONL (line-by-line, more memory-efficient)
-result, err := json2toon.ConvertJSONLStream(jsonLines)
 ```
 
-### Reverse Conversion (TOON to JSON)
+### Format-Specific Conversion
+
+```go
+// JSONC (with comments) to TOON
+result, err := json2toon.ConvertJSONC(jsoncBytes)
+result, err := json2toon.ConvertJSONCString(jsoncStr)
+
+// JSON Lines to TOON
+result, err := json2toon.ConvertJSONL(jsonlBytes)
+result, err := json2toon.ConvertJSONLString(jsonlStr)
+
+// Streaming JSONL (line-by-line, more memory-efficient for large files)
+result, err := json2toon.ConvertJSONLStream(jsonlBytes)
+result, err := json2toon.ConvertJSONLStreamString(jsonlStr)
+```
+
+### Auto-Detection Conversion
+
+```go
+// Auto-detect format (JSON/JSONC/JSONL) and convert to TOON
+result, err := json2toon.ConvertAuto(data)
+
+// Auto-detect and convert a file
+result, err := json2toon.ConvertAutoFile("config.json")
+```
+
+### Reverse Conversion (TOON → JSON)
 
 ```go
 // TOON bytes to JSON bytes
@@ -160,7 +180,7 @@ result, err := json2toon.ConvertToJSONFile("config.toon")
 
 ```go
 converter := json2toon.NewConverter(writer)
-defer converter.Close()
+defer func() { _ = converter.Close() }()
 
 err := converter.ConvertJSON(jsonBytes)
 // or
@@ -175,20 +195,30 @@ err := converter.ConvertJSONLStream(reader)
 ```go
 // Custom indentation
 result, err := json2toon.ConvertWithOptions(json,
-    json2toon.WithIndent(4))
+	json2toon.WithIndent(4))
 
 // Custom delimiter
 result, err := json2toon.ConvertWithOptions(json,
-    json2toon.WithDelimiter('|'))
+	json2toon.WithDelimiter('|'))
 
 // Key folding
 result, err := json2toon.ConvertWithOptions(json,
-    json2toon.WithKeyFolding("safe"))
+	json2toon.WithKeyFolding("safe"))
 
-// Strict mode
+// Strict mode (encode)
 result, err := json2toon.ConvertWithOptions(json,
-    json2toon.WithStrict(true))
+	json2toon.WithStrict(true))
+
+// Strict mode (decode) - validates TOON syntax strictly
+result, err := json2toon.ConvertToJSONWithOptions(toon,
+	json2toon.WithDecodeStrict(true))
+
+// Path expansion (decode) - expands folded keys back to nested objects
+result, err := json2toon.ConvertToJSONWithOptions(toon,
+	json2toon.WithExpandPaths(true))
 ```
+
+Each conversion function has a `WithOptions` variant (e.g., `ConvertJSONCWithOptions`, `ConvertJSONLWithOptions`, `ConvertAutoWithOptions`) that accepts the same encoder options.
 
 ## TOON Format
 
