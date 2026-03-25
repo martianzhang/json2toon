@@ -89,7 +89,7 @@ func main() {
 	flag.StringVar(&keyFolding, "key-folding", "", "key folding mode (empty, \"safe\", \"upper\", \"lower\")")
 	flag.BoolVar(&strict, "strict", false, "strict mode")
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), `j2t - JSON to TOON converter
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), `j2t - JSON to TOON converter
 
 Usage:
   j2t [options] [file]
@@ -97,7 +97,7 @@ Usage:
 Options:
 `)
 		flag.PrintDefaults()
-		fmt.Fprintf(flag.CommandLine.Output(), `
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), `
 Examples:
   echo '{"id": 1}' | j2t
   j2t config.json
@@ -116,7 +116,7 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", args[0], err)
 			os.Exit(1)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		input = f
 	} else {
 		input = os.Stdin
@@ -161,7 +161,7 @@ func convertJSON(data []byte, opts []json2toon.ConverterOption) {
 		fmt.Fprintf(os.Stderr, "Error converting: %v\n", err)
 		os.Exit(1)
 	}
-	os.Stdout.Write(result)
+	_, _ = os.Stdout.Write(result)
 }
 
 func convertJSONC(data []byte, opts []json2toon.ConverterOption) {
@@ -170,7 +170,7 @@ func convertJSONC(data []byte, opts []json2toon.ConverterOption) {
 		fmt.Fprintf(os.Stderr, "Error converting: %v\n", err)
 		os.Exit(1)
 	}
-	os.Stdout.Write(result)
+	_, _ = os.Stdout.Write(result)
 }
 
 func convertJSONL(data []byte, opts []json2toon.ConverterOption) {
@@ -225,7 +225,7 @@ func convertJSONL(data []byte, opts []json2toon.ConverterOption) {
 	if isTabular && len(lines) > 0 {
 		// Output as tabular array
 		header := fmt.Sprintf("[%d]{%s}:\n", len(lines), strings.Join(expectedKeys, ","))
-		os.Stdout.Write([]byte(header))
+		_, _ = os.Stdout.Write([]byte(header))
 
 		for i, line := range lines {
 			indent := "  "

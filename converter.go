@@ -169,13 +169,14 @@ func (c *Converter) collectArrayItems(decoder *json.Decoder) ([]interface{}, err
 		}
 
 		if delim, ok := token.(json.Delim); ok {
-			if delim == '{' {
+			switch delim {
+			case '{':
 				obj, err := c.decodeObjectToMap(decoder)
 				if err != nil {
 					return nil, err
 				}
 				items = append(items, obj)
-			} else if delim == '[' {
+			case '[':
 				subArr, err := c.collectArrayItems(decoder)
 				if err != nil {
 					return nil, err
@@ -210,18 +211,21 @@ func (c *Converter) decodeObjectToMap(decoder *json.Decoder) (map[string]interfa
 		}
 
 		if delim, ok := valueToken.(json.Delim); ok {
-			if delim == '{' {
+			switch delim {
+			case '{':
 				subObj, err := c.decodeObjectToMap(decoder)
 				if err != nil {
 					return nil, err
 				}
 				m[key] = subObj
-			} else if delim == '[' {
+			case '[':
 				subArr, err := c.collectArrayItems(decoder)
 				if err != nil {
 					return nil, err
 				}
 				m[key] = subArr
+			default:
+				m[key] = valueToken
 			}
 		} else {
 			m[key] = valueToken

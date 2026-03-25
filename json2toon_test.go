@@ -243,13 +243,13 @@ func TestConvertFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := `{"key": "value"}`
 	if _, err := tmpFile.Write([]byte(content)); err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	result, err := ConvertFile(tmpFile.Name())
 	if err != nil {
@@ -267,13 +267,13 @@ func TestConvertFileToWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := `{"key": "value"}`
 	if _, err := tmpFile.Write([]byte(content)); err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	var buf bytes.Buffer
 	err = ConvertFileToWriter(tmpFile.Name(), &buf)
@@ -396,7 +396,7 @@ func TestEncoderDirect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
-	enc.Flush()
+	_ = enc.Flush()
 
 	if buf.Len() == 0 {
 		t.Error("Expected non-empty output")
@@ -469,13 +469,13 @@ func TestConvertFileWithOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := `{"name": "Test"}`
 	if _, err := tmpFile.Write([]byte(content)); err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	result, err := ConvertFileWithOptions(tmpFile.Name(), WithIndent(4))
 	if err != nil {
@@ -572,7 +572,6 @@ func TestNormalizeNumber(t *testing.T) {
 	}{
 		{0.0, "0"},
 		{1.0, "1"},
-		{-0.0, "0"},
 		{1.5, "1.5"},
 		{1.500, "1.5"},
 	}

@@ -360,7 +360,7 @@ func (e *Encoder) tryFold(m map[string]interface{}) (string, bool) {
 			return "", false
 		}
 
-		if nested == nil || len(nested) == 0 {
+		if len(nested) == 0 {
 			return k + ":", true
 		}
 
