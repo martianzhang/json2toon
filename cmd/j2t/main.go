@@ -233,9 +233,9 @@ func convertJSONL(data []byte, opts []json2toon.ConverterOption) {
 			for _, k := range expectedKeys {
 				vals = append(vals, formatValue(line.values[k], ","))
 			}
-			os.Stdout.Write([]byte(indent + strings.Join(vals, ",")))
+			_, _ = os.Stdout.Write([]byte(indent + strings.Join(vals, ",")))
 			if i < len(lines)-1 {
-				os.Stdout.Write([]byte("\n"))
+				_, _ = os.Stdout.Write([]byte("\n"))
 			}
 		}
 	} else {
@@ -249,9 +249,9 @@ func convertJSONL(data []byte, opts []json2toon.ConverterOption) {
 			}
 
 			if !first {
-				os.Stdout.Write([]byte("---\n"))
+				_, _ = os.Stdout.Write([]byte("---\n"))
 			}
-			os.Stdout.Write(bytes.TrimSpace(result))
+			_, _ = os.Stdout.Write(bytes.TrimSpace(result))
 			first = false
 		}
 	}
