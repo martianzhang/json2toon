@@ -6,21 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 )
 
+// Converter provides streaming JSON/JSONC/JSONL to TOON conversion.
+// It writes directly to an io.Writer without buffering the entire output.
 type Converter struct {
 	encoder *Encoder
 	w       io.Writer
 	opts    ConverterOptions
 }
 
+// NewConverter creates a new Converter that writes TOON to w.
 func NewConverter(w io.Writer) *Converter {
 	return NewConverterWithOptions(w, DefaultConverterOptions())
 }
 
+// NewConverterWithOptions creates a new Converter with custom options.
 func NewConverterWithOptions(w io.Writer, opts ConverterOptions) *Converter {
 	return &Converter{
 		encoder: NewEncoderWithOptions(w, opts.Encoder),
@@ -29,6 +34,9 @@ func NewConverterWithOptions(w io.Writer, opts ConverterOptions) *Converter {
 	}
 }
 
+// ConvertJSON converts JSON bytes to TOON using streaming token-based parsing.
+// It is memory-efficient for large JSON documents as it doesn't load the
+// entire input into memory.
 func (c *Converter) ConvertJSON(jsonBytes []byte) error {
 	reader := bytes.NewReader(jsonBytes)
 	decoder := json.NewDecoder(reader)
@@ -69,6 +77,8 @@ func (c *Converter) ConvertJSON(jsonBytes []byte) error {
 	return c.encoder.Flush()
 }
 
+// ConvertJSONC converts JSONC (JSON with comments) to TOON.
+// It first strips comments (// and /* */) and then converts the result.
 func (c *Converter) ConvertJSONC(jsoncBytes []byte) error {
 	cleaned, err := StripComments(jsoncBytes)
 	if err != nil {
@@ -89,14 +99,16 @@ func (c *Converter) ConvertJSONL(jsonlBytes []byte) error {
 func (c *Converter) ConvertJSONLFromReader(r io.Reader) error {
 	scanner := bufio.NewScanner(r)
 
-	type lineData struct {
-		raw    []byte
-		keys   []string
-		values map[string]interface{}
+	tmpFile, err := os.CreateTemp("", "json2toon-jsonl-*")
+	if err != nil {
+		return err
 	}
-	var lines []lineData
+	defer os.Remove(tmpFile.Name())
+	defer func() { _ = tmpFile.Close() }()
+
 	isTabular := true
 	var expectedKeys []string
+	lineCount := 0
 
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
@@ -104,26 +116,29 @@ func (c *Converter) ConvertJSONLFromReader(r io.Reader) error {
 			continue
 		}
 
+		if _, err := tmpFile.Write(line); err != nil {
+			return err
+		}
+		if _, err := tmpFile.Write([]byte("\n")); err != nil {
+			return err
+		}
+		lineCount++
+
 		var obj map[string]interface{}
 		if err := json.Unmarshal(line, &obj); err != nil {
 			isTabular = false
-		} else {
-			keys := make([]string, 0, len(obj))
-			for k := range obj {
-				keys = append(keys, k)
-			}
+			continue
+		}
 
-			if expectedKeys == nil {
-				expectedKeys = keys
-			} else if !sameKeys(expectedKeys, keys) {
-				isTabular = false
-			}
+		keys := make([]string, 0, len(obj))
+		for k := range obj {
+			keys = append(keys, k)
+		}
 
-			lines = append(lines, lineData{
-				raw:    line,
-				keys:   keys,
-				values: obj,
-			})
+		if expectedKeys == nil {
+			expectedKeys = keys
+		} else if !sameKeys(expectedKeys, keys) {
+			isTabular = false
 		}
 	}
 
@@ -131,18 +146,38 @@ func (c *Converter) ConvertJSONLFromReader(r io.Reader) error {
 		return err
 	}
 
+	if lineCount == 0 {
+		return nil
+	}
+
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
+	secondPass := bufio.NewScanner(tmpFile)
+
 	delim := string(c.encoder.opts.Delimiter)
 
-	if isTabular && len(lines) > 0 {
-		header := fmt.Sprintf("[%d]{%s}:\n", len(lines), strings.Join(expectedKeys, delim))
+	if isTabular && len(expectedKeys) > 0 {
+		header := fmt.Sprintf("[%d]{%s}:\n", lineCount, strings.Join(expectedKeys, delim))
 		if _, err := c.w.Write([]byte(header)); err != nil {
 			return err
 		}
 
-		for _, line := range lines {
+		for secondPass.Scan() {
+			line := bytes.TrimSpace(secondPass.Bytes())
+			if len(line) == 0 {
+				continue
+			}
+
+			var obj map[string]interface{}
+			if err := json.Unmarshal(line, &obj); err != nil {
+				return err
+			}
+
 			values := make([]string, len(expectedKeys))
 			for i, k := range expectedKeys {
-				values[i] = c.formatPrimitiveValue(line.values[k], delim)
+				values[i] = c.formatPrimitiveValue(obj[k], delim)
 			}
 			if _, err := c.w.Write([]byte("  " + strings.Join(values, delim))); err != nil {
 				return err
@@ -151,21 +186,31 @@ func (c *Converter) ConvertJSONLFromReader(r io.Reader) error {
 				return err
 			}
 		}
+
+		return secondPass.Err()
 	} else {
-		for i, line := range lines {
-			if i > 0 {
+		first := true
+		for secondPass.Scan() {
+			line := bytes.TrimSpace(secondPass.Bytes())
+			if len(line) == 0 {
+				continue
+			}
+
+			if !first {
 				if _, err := c.w.Write([]byte("---\n")); err != nil {
 					return err
 				}
 			}
+			first = false
+
 			conv := NewConverterWithOptions(c.w, c.opts)
-			if err := conv.ConvertJSON(line.raw); err != nil {
+			if err := conv.ConvertJSON(line); err != nil {
 				return err
 			}
 		}
-	}
 
-	return nil
+		return secondPass.Err()
+	}
 }
 
 // ConvertJSONLStream converts JSON Lines to TOON in streaming mode.
@@ -203,6 +248,10 @@ func (c *Converter) ConvertJSONLStream(r io.Reader) error {
 }
 
 // ConvertAuto auto-detects and converts the input format (JSON/JSONC/JSONL) to TOON.
+// It examines the input to determine the format:
+//   - JSONC: contains // or /* */ comments
+//   - JSONL: multiple lines of valid JSON objects
+//   - JSON: standard JSON format (default)
 func (c *Converter) ConvertAuto(data []byte) error {
 	format := DetectFormat(data)
 	switch format {
@@ -215,6 +264,7 @@ func (c *Converter) ConvertAuto(data []byte) error {
 	}
 }
 
+// Close flushes any buffered data and releases resources.
 func (c *Converter) Close() error {
 	return c.encoder.Flush()
 }
@@ -400,7 +450,7 @@ func (c *Converter) writeArrayDirect(items []interface{}) error {
 
 	if c.isTabularArray(items) {
 		header := "[" + strconv.Itoa(len(items)) + "]{"
-		firstObj := items[0].(map[string]interface{})
+		firstObj, _ := items[0].(map[string]interface{})
 		keys := makeSortedKeys(firstObj)
 		header += strings.Join(keys, ",") + "}:"
 		if _, err := c.w.Write([]byte(header)); err != nil {
@@ -588,11 +638,11 @@ func (c *Converter) writeTabularRows(items []interface{}) error {
 	}
 
 	delim := string(c.encoder.opts.Delimiter)
-	firstObj := items[0].(map[string]interface{})
+	firstObj, _ := items[0].(map[string]interface{})
 	keys := makeSortedKeys(firstObj)
 
 	for _, item := range items {
-		obj := item.(map[string]interface{})
+		obj, _ := item.(map[string]interface{})
 		if _, err := c.w.Write([]byte("\n")); err != nil {
 			return err
 		}
@@ -614,51 +664,11 @@ func (c *Converter) writeTabularRows(items []interface{}) error {
 }
 
 func (c *Converter) formatPrimitiveValue(v interface{}, delim string) string {
-	switch val := v.(type) {
-	case nil:
-		return ""
-	case bool:
-		if val {
-			return "true"
-		}
-		return "false"
-	case float64:
-		return normalizeNumber(val)
-	case string:
-		if needsQuoting(val, rune(delim[0])) {
-			return `"` + escapeString(val) + `"`
-		}
-		return val
-	default:
-		return ""
-	}
+	return formatPrimitiveToString(v, rune(delim[0]))
 }
 
 func (c *Converter) encodePrimitive(v interface{}) error {
-	switch val := v.(type) {
-	case nil:
-		_, err := c.w.Write([]byte("null"))
-		return err
-	case bool:
-		if val {
-			_, err := c.w.Write([]byte("true"))
-			return err
-		}
-		_, err := c.w.Write([]byte("false"))
-		return err
-	case float64:
-		_, err := c.w.Write([]byte(normalizeNumber(val)))
-		return err
-	case string:
-		if needsQuoting(val, c.encoder.opts.Delimiter) {
-			_, err := c.w.Write([]byte(`"` + escapeString(val) + `"`))
-			return err
-		}
-		_, err := c.w.Write([]byte(val))
-		return err
-	default:
-		return fmt.Errorf("unknown primitive type: %T", v)
-	}
+	return writePrimitiveToWriter(c.w, v, c.encoder.opts.Delimiter)
 }
 
 func makeSortedKeys(m map[string]interface{}) []string {
