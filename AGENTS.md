@@ -63,7 +63,7 @@ go mod tidy
 - **Package name**: `json2toon` (no underscores, lowercase)
 - **Internal functions**: Can be unexported (lowercase)
 - **API functions**: Must be exported (uppercase)
-- **File naming**: Use descriptive lowercase names, e.g., `encoder.go`, `converter.go`
+- **File naming**: Use descriptive lowercase names, e.g., `encoder.go`, `toon.go`, `format.go`
 
 ### Imports
 
@@ -140,7 +140,7 @@ func NewEncoder(w io.Writer) *Encoder {
 
 ### Testing
 
-- Test file naming: `<package>_test.go`
+- Test file naming: `<module>_test.go` (e.g., `toon_test.go`, `decoder_test.go`)
 - Test function naming: `TestFunctionName`
 - Benchmark naming: `BenchmarkFunctionName`
 - Table-driven tests for multiple test cases
@@ -186,16 +186,20 @@ TOON (Token-Oriented Object Notation) key rules:
 
 ```
 json2toon/
+├── options.go           # Unified option types (EncoderOptions, DecodeOptions)
+├── format.go            # Format detection (DetectFormat)
+├── streaming.go         # Streaming JSON to TOON conversion
 ├── encoder.go           # Core TOON encoder
-├── encoder_options.go   # Encoder configuration
-├── converter.go         # JSON/JSONC to TOON converter
-├── converter_options.go # Converter configuration
-├── jsonc.go            # JSONC comment stripping
-├── json2toon.go        # Public API
-├── json2toon_test.go  # Unit tests
-├── bench_test.go       # Benchmarks
+├── decoder.go           # TOON to JSON decoder
+├── decoder_test.go      # Decoder tests
+├── jsonc.go             # JSONC comment stripping
+├── toon.go              # Public API
+├── toon_test.go         # Public API tests
+├── integration_test.go  # End-to-end integration tests
+├── bench_test.go        # Benchmarks
 ├── go.mod
-└── README.md
+├── README.md
+└── AGENTS.md
 ```
 
 ## Common Patterns
