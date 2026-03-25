@@ -112,7 +112,8 @@ func (c *Converter) decodeObject(decoder *json.Decoder) error {
 			return err
 		}
 
-		if err := c.writeValueStream(valueToken, decoder); err != nil {
+		_, err = c.writeValueStream(valueToken, decoder)
+		if err != nil {
 			return err
 		}
 	}
@@ -120,36 +121,42 @@ func (c *Converter) decodeObject(decoder *json.Decoder) error {
 	return nil
 }
 
-func (c *Converter) writeValueStream(token interface{}, decoder *json.Decoder) error {
+func (c *Converter) writeValueStream(token interface{}, decoder *json.Decoder) (bool, error) {
 	delim, ok := token.(json.Delim)
 	if ok {
 		switch delim {
 		case '{':
 			if _, err := c.w.Write([]byte(":\n")); err != nil {
-				return err
+				return false, err
 			}
 			c.encoder.depth++
 			if err := c.decodeObject(decoder); err != nil {
-				return err
+				return false, err
 			}
 			c.encoder.depth--
+			// Consume the closing } that decodeObject exited before
+			_, err := decoder.Token()
+			if err != nil {
+				return true, err
+			}
+			return true, nil
 		case '[':
 			if _, err := c.w.Write([]byte(":")); err != nil {
-				return err
+				return false, err
 			}
 			items, err := c.collectArrayItems(decoder)
 			if err != nil {
-				return err
+				return false, err
 			}
-			return c.writeArrayDirect(items)
+			return false, c.writeArrayDirect(items)
 		}
-		return nil
+		return false, nil
 	}
 
 	if _, err := c.w.Write([]byte(": ")); err != nil {
-		return err
+		return false, err
 	}
-	return c.encodePrimitive(token)
+	return false, c.encodePrimitive(token)
 }
 
 func (c *Converter) collectArrayItems(decoder *json.Decoder) ([]interface{}, error) {
