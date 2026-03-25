@@ -852,7 +852,7 @@ func TestConvertJSONL(t *testing.T) {
 func TestEncodeValueWithNilInterface(t *testing.T) {
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf)
-	var v interface{} = nil
+	var v interface{}
 	err := enc.Encode(v)
 	if err != nil {
 		t.Fatalf("Encode nil failed: %v", err)
@@ -1257,7 +1257,7 @@ func TestEncodeChanError(t *testing.T) {
 
 // --- Converter: isPrimitive ---
 
-func TestIsPrimitive(t *testing.T) {
+func TestIsPrimitive(_ *testing.T) {
 	tests := []struct {
 		val    interface{}
 		isPrim bool
@@ -1499,7 +1499,7 @@ func TestJSONLDifferentKeys(t *testing.T) {
 
 // --- Converter: isTabularArray branches ---
 
-func TestIsTabularArrayNonMapFirst(t *testing.T) {
+func TestIsTabularArrayNonMapFirst(_ *testing.T) {
 	// First element not a map → not tabular
 	var buf bytes.Buffer
 	conv := NewConverter(&buf)
@@ -1509,7 +1509,7 @@ func TestIsTabularArrayNonMapFirst(t *testing.T) {
 	// Should produce output without error
 }
 
-func TestConverterIsTabularArrayEmptyKeys(t *testing.T) {
+func TestConverterIsTabularArrayEmptyKeys(_ *testing.T) {
 	// Object with empty keys
 	var buf bytes.Buffer
 	conv := NewConverter(&buf)
@@ -1542,7 +1542,7 @@ func TestConverterWriteArrayListStreamPrimitives(t *testing.T) {
 
 // --- Encoder: writeArrayItems with non-primitive ---
 
-func TestEncoderWriteArrayItemsNonPrimitive(t *testing.T) {
+func TestEncoderWriteArrayItemsNonPrimitive(_ *testing.T) {
 	// writeArrayItems calls writePrimitive which errors on non-primitives
 	// This exercises the writeArray → case []interface{} → writeArrayItems path
 	var buf bytes.Buffer
@@ -1580,7 +1580,7 @@ func TestEncoderEncodeInt(t *testing.T) {
 	}
 }
 
-func TestEncoderWriteQuotedStringCR(t *testing.T) {
+func TestEncoderWriteQuotedStringCR(_ *testing.T) {
 	// CR escape in quoted string
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf)
@@ -1602,7 +1602,7 @@ func TestEncoderWriteObjectDefaultCase(t *testing.T) {
 	}
 }
 
-func TestEncoderGetFirstKeyEmpty(t *testing.T) {
+func TestEncoderGetFirstKeyEmpty(_ *testing.T) {
 	// getFirstKey called via writeArray nested array handling
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf)
@@ -1643,7 +1643,7 @@ func TestConverterEncodePrimitiveString(t *testing.T) {
 	}
 }
 
-func TestConverterWriteTabularRowsDifferentKeys(t *testing.T) {
+func TestConverterWriteTabularRowsDifferentKeys(_ *testing.T) {
 	var buf bytes.Buffer
 	conv := NewConverter(&buf)
 	// Two objects with same key count but different keys - triggers non-primitive check
@@ -1672,7 +1672,7 @@ func TestConverterDecodeObjectTrailingComma(t *testing.T) {
 	}
 }
 
-func TestConverterWriteValueStreamPrimitive(t *testing.T) {
+func TestConverterWriteValueStreamPrimitive(_ *testing.T) {
 	var buf bytes.Buffer
 	conv := NewConverter(&buf)
 	// Root-level primitives
@@ -1680,7 +1680,7 @@ func TestConverterWriteValueStreamPrimitive(t *testing.T) {
 	_ = conv.Close()
 }
 
-func TestConverterCollectArrayItemsNested(t *testing.T) {
+func TestConverterCollectArrayItemsNested(_ *testing.T) {
 	var buf bytes.Buffer
 	conv := NewConverter(&buf)
 	// Deeply nested arrays

@@ -15,7 +15,7 @@ fmt:
 	go fmt ./...
 
 lint:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 	$(GOPATH)/bin/golangci-lint run
 
 test: fmt

@@ -1,3 +1,4 @@
+// Package json2toon provides benchmarks for the json2toon library.
 package json2toon
 
 import (

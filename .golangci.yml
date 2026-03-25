@@ -1,32 +1,37 @@
-version: 2
-
-linters:
-  default: none
-  enable:
-    - errcheck      # Check for unchecked errors (critical)
-    - gosimple      # Simplify code
-    - staticcheck   # Static analysis checks
-    - unused        # Checks for unused code
-    - gofmt         # Checks whether code was gofmt-ed
-    - govet         # Reports suspicious constructs
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-closure: true
-  govet:
-    enable-all: true
-    disable:
-      - shadow        # Variable shadowing (style)
-      - fieldalignment # Struct alignment (optimization hint)
-  gocritic:
-    disabled-checks:
-      - ifElseChain        # Style suggestion
-      - offBy1             # False positives in some cases
-      - exitAfterDefer     # Intentional for CLI tools
-      - fieldalignment     # Optimization hint
-      - shadow             # Style suggestion
-
+version: "2"
 run:
   timeout: 5m
-  tests: true
+  go: '1.25' # Match your Go version
+
+# Linters to enable (core + popular Go linters)
+linters:
+  enable:
+    - govet # Official Go vet (critical)
+    - errcheck # Check for unchecked errors
+    - staticcheck # Advanced static analysis
+    - unused # Find unused code/variables
+    - revive # Replacement for golint (style checks)
+    - misspell # Fix spelling mistakes
+    - gocyclo # Check function cyclomatic complexity
+    - nakedret # Check for naked returns
+    - unconvert # Remove unnecessary type conversions
+
+# Linter settings (adjust strictness as needed)
+linters-settings:
+  gocyclo:
+    min-complexity: 10 # Warn for functions with complexity >10
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+
+# Ignore paths (customize for your project)
+issues:
+  exclude-dirs:
+    - vendor
+    - node_modules
+    - testdata
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo # Ignore complexity in test files

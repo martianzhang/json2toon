@@ -103,7 +103,7 @@ func (c *Converter) ConvertJSONLFromReader(r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 	defer func() { _ = tmpFile.Close() }()
 
 	isTabular := true
@@ -188,29 +188,28 @@ func (c *Converter) ConvertJSONLFromReader(r io.Reader) error {
 		}
 
 		return secondPass.Err()
-	} else {
-		first := true
-		for secondPass.Scan() {
-			line := bytes.TrimSpace(secondPass.Bytes())
-			if len(line) == 0 {
-				continue
-			}
+	}
+	first := true
+	for secondPass.Scan() {
+		line := bytes.TrimSpace(secondPass.Bytes())
+		if len(line) == 0 {
+			continue
+		}
 
-			if !first {
-				if _, err := c.w.Write([]byte("---\n")); err != nil {
-					return err
-				}
-			}
-			first = false
-
-			conv := NewConverterWithOptions(c.w, c.opts)
-			if err := conv.ConvertJSON(line); err != nil {
+		if !first {
+			if _, err := c.w.Write([]byte("---\n")); err != nil {
 				return err
 			}
 		}
+		first = false
 
-		return secondPass.Err()
+		conv := NewConverterWithOptions(c.w, c.opts)
+		if err := conv.ConvertJSON(line); err != nil {
+			return err
+		}
 	}
+
+	return secondPass.Err()
 }
 
 // ConvertJSONLStream converts JSON Lines to TOON in streaming mode.

@@ -49,7 +49,7 @@ func DefaultConverterOptions() ConverterOptions {
 	}
 }
 
-// DecoderOption configures the decoder behavior.
+// DecodeOption configures the decoder behavior.
 type DecodeOption func(*DecodeOptions)
 
 // DecodeOptions holds decoder configuration.
