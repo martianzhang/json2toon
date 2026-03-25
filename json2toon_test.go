@@ -2,6 +2,7 @@ package json2toon
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -2257,5 +2258,150 @@ func TestIsJSONLine(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("isJSONLine(%q) = %v, want %v", tt.line, result, tt.expected)
 		}
+	}
+}
+
+// --- Encoder: formatValue tests ---
+
+func TestEncoderFormatValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		expected string
+	}{
+		{
+			name:     "true boolean",
+			json:     `{"key": true}`,
+			expected: "true",
+		},
+		{
+			name:     "false boolean",
+			json:     `{"key": false}`,
+			expected: "false",
+		},
+		{
+			name:     "integer",
+			json:     `{"key": 42}`,
+			expected: "42",
+		},
+		{
+			name:     "float",
+			json:     `{"key": 3.14}`,
+			expected: "3.14",
+		},
+		{
+			name:     "string",
+			json:     `{"key": "hello"}`,
+			expected: "hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Convert([]byte(tt.json))
+			if err != nil {
+				t.Fatalf("Convert failed: %v", err)
+			}
+			if !bytes.Contains(result, []byte(tt.expected)) {
+				t.Errorf("expected %q in output: %s", tt.expected, result)
+			}
+		})
+	}
+}
+
+// --- Encoder: Tabular with tab delimiter ---
+
+func TestEncoderTabularWithTabDelimiter(t *testing.T) {
+	json := `{"items": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]}`
+	result, err := ConvertWithOptions([]byte(json), WithDelimiter('\t'))
+	if err != nil {
+		t.Fatalf("ConvertWithOptions failed: %v", err)
+	}
+	// Should contain tab character in the header
+	if !bytes.Contains(result, []byte("\t")) {
+		t.Errorf("expected tab delimiter in output: %s", result)
+	}
+}
+
+func TestEncoderPrimitiveArrayWithTabDelimiter(t *testing.T) {
+	json := `{"items": [1, 2, 3]}`
+	result, err := ConvertWithOptions([]byte(json), WithDelimiter('\t'))
+	if err != nil {
+		t.Fatalf("ConvertWithOptions failed: %v", err)
+	}
+	// Primitive arrays should have inline format
+	if !bytes.Contains(result, []byte("items:[3]:")) {
+		t.Errorf("expected inline array format: %s", result)
+	}
+}
+
+// --- Encoder: Arrays of arrays ---
+
+func TestEncoderArraysOfArrays(t *testing.T) {
+	json := `{"pairs": [[1, 2], [3, 4]]}`
+	result, err := Convert([]byte(json))
+	if err != nil {
+		t.Fatalf("Convert failed: %v", err)
+	}
+	// Should contain list format for arrays of arrays
+	if !bytes.Contains(result, []byte("- [2]:")) {
+		t.Errorf("expected array of arrays format: %s", result)
+	}
+}
+
+func TestEncoderNestedPrimitiveArrays(t *testing.T) {
+	json := `[[1, 2], [3, 4]]`
+	result, err := Convert([]byte(json))
+	if err != nil {
+		t.Fatalf("Convert failed: %v", err)
+	}
+	// Root array of arrays
+	if !bytes.Contains(result, []byte("- [2]:")) {
+		t.Errorf("expected array of arrays format: %s", result)
+	}
+}
+
+func TestConvertToJSONFile(t *testing.T) {
+	// Use testdata/example.toon which should exist
+	result, err := ConvertToJSONFile("testdata/example.toon")
+	if err != nil {
+		t.Fatalf("ConvertToJSONFile failed: %v", err)
+	}
+	// Verify valid JSON output
+	var v interface{}
+	if err := json.Unmarshal(result, &v); err != nil {
+		t.Fatalf("Invalid JSON output: %s", result)
+	}
+}
+
+func TestConvertToJSONFileString(t *testing.T) {
+	// Use testdata/example.toon which should exist
+	result, err := ConvertToJSONFileString("testdata/example.toon")
+	if err != nil {
+		t.Fatalf("ConvertToJSONFileString failed: %v", err)
+	}
+	// Verify valid JSON output
+	var v interface{}
+	if err := json.Unmarshal([]byte(result), &v); err != nil {
+		t.Fatalf("Invalid JSON output: %s", result)
+	}
+}
+
+func TestWithDecodeStrictOption(t *testing.T) {
+	// Test the WithDecodeStrict option
+	toon := `key: value`
+	result, err := ConvertToJSONWithOptions([]byte(toon), WithDecodeStrict(true))
+	if err != nil {
+		t.Fatalf("ConvertToJSONWithOptions with strict failed: %v", err)
+	}
+	// Verify valid JSON output
+	var v interface{}
+	if err := json.Unmarshal(result, &v); err != nil {
+		t.Fatalf("Invalid JSON output: %s", result)
+	}
+	// Verify the value is correct
+	m := v.(map[string]interface{})
+	if m["key"] != "value" {
+		t.Errorf("got %v, want %v", m["key"], "value")
 	}
 }

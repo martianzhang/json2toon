@@ -361,3 +361,284 @@ tags:[3]: json,toon,converter`
 		t.Errorf("Expected tags to be array, got %T", data["tags"])
 	}
 }
+
+// --- Expand Paths Tests ---
+
+func TestDecodeExpandPaths(t *testing.T) {
+	toon := `data.metadata.items[2]: a,b`
+	expected := `{
+  "data": {
+    "metadata": {
+      "items": ["a", "b"]
+    }
+  }
+}`
+	result, err := ConvertToJSONWithOptions([]byte(toon), WithExpandPaths(true))
+	if err != nil {
+		t.Fatalf("ConvertToJSONWithOptions failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+func TestDecodeExpandPathsMultiple(t *testing.T) {
+	toon := `a.b.c: value1
+a.b.d: value2`
+	expected := `{
+  "a": {
+    "b": {
+      "c": "value1",
+      "d": "value2"
+    }
+  }
+}`
+	result, err := ConvertToJSONWithOptions([]byte(toon), WithExpandPaths(true))
+	if err != nil {
+		t.Fatalf("ConvertToJSONWithOptions failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+// --- Root Array Tests ---
+
+func TestDecodeRootArray(t *testing.T) {
+	toon := `[3]: x,y,z`
+	expected := `["x", "y", "z"]`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+func TestDecodeRootPrimitive(t *testing.T) {
+	toon := `"hello"`
+	expected := `"hello"`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+// --- Empty Container Tests ---
+
+func TestDecodeEmptyArrayInline(t *testing.T) {
+	toon := `items:[0]:`
+	expected := `{"items": []}`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+// --- Tabular Header Format Tests ---
+
+func TestDecodeTabularWithBrackets(t *testing.T) {
+	toon := `users[2]{id,name}:
+  1,Alice
+  2,Bob`
+	expected := `{
+  "users": [
+    {"id": 1, "name": "Alice"},
+    {"id": 2, "name": "Bob"}
+  ]
+}`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+// --- Inline Array Count Validation ---
+
+func TestDecodeInlineArrayCountMismatch(t *testing.T) {
+	_, err := DecodeToJSON([]byte(`key:[2]: 1,2,3,4`))
+	if err == nil {
+		t.Error("Expected error for count mismatch")
+	}
+}
+
+func TestDecodeInlineArrayCountMatch(t *testing.T) {
+	toon := `key:[2]: 1,2`
+	expected := `{"key": [1, 2]}`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+// --- Alternative Format Tests ---
+
+func TestDecodeInlineArrayWithSpaceBeforeBracket(t *testing.T) {
+	toon := `key: [3]: 1,2,3`
+	expected := `{"key": [1, 2, 3]}`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+func TestDecodeKeyWithoutArray(t *testing.T) {
+	toon := `key: value`
+	expected := `{"key": "value"}`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+func TestDecodeStandaloneListItems(t *testing.T) {
+	// Test standalone list items (parseListItems)
+	toon := `- item1
+- item2
+- item3`
+	expected := `["item1","item2","item3"]`
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got, want interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("Invalid expected JSON: %v", err)
+	}
+
+	if !jsonEq(got, want) {
+		t.Errorf("JSON mismatch.\nGot: %s\nWant: %s", result, expected)
+	}
+}
+
+func TestDecodeStandaloneListItemsWithObjects(t *testing.T) {
+	// Test list items with key:value format (parseListItems)
+	// Note: When all items have the same key and no nested content,
+	// the decoder returns a simple array of values
+	toon := `- name: Alice
+- name: Bob
+- name: Carol`
+	// The decoder returns values when parseListArrayItems detects same key
+	result, err := DecodeToJSON([]byte(toon))
+	if err != nil {
+		t.Fatalf("DecodeToJSON failed: %v", err)
+	}
+
+	var got interface{}
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("Invalid JSON output: %v", err)
+	}
+
+	// Should return a valid array
+	arr, ok := got.([]interface{})
+	if !ok {
+		t.Fatalf("Expected array, got: %T", got)
+	}
+	if len(arr) != 3 {
+		t.Errorf("Expected 3 items, got %d", len(arr))
+	}
+}

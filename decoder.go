@@ -136,7 +136,11 @@ func (d *Decoder) parseLines(lines []string) (interface{}, error) {
 				i++
 				continue
 			}
-			// If key is empty, this is actually a list array - fall through to key:value handling
+			// If key is empty but values exist, this is a root-level inline array
+			if values != nil {
+				return values, nil
+			}
+			// If key is empty and no values, this is a list array - fall through
 		}
 
 		// Check for key: value
