@@ -8,7 +8,7 @@ JSON/JSONC/JSONL to TOON (and back) converter library written in Go.
 - **Streaming support** - Token-based JSON parsing for large files
 - **JSONC support** - Handles `//` and `/* */` comments before parsing
 - **JSONL support** - Auto-detects and converts JSON Lines format
-- **TOON v3.0 format** - Produces valid TOON output
+- **TOON format** - Produces valid TOON output ([Format Overview](https://toonformat.dev/guide/format-overview.html))
 - **Configurable** - Indent, delimiter, key folding, strict mode
 - **CLI tool** - `j2t` command for convenient file/stdin conversion
 
@@ -218,10 +218,12 @@ make release   # Cross-compile for Linux/macOS/Windows
 ## Benchmarks
 
 ```
-BenchmarkConvertSimple       277158 ns/op    6080 B/op    63 allocs/op
-BenchmarkConvertNested       172875 ns/op    6608 B/op    90 allocs/op
-BenchmarkConvertArray         22027 ns/op   26984 B/op   934 allocs/op
-BenchmarkConvertLargeFile     165196 ns/op    6456 B/op    62 allocs/op
+BenchmarkConvertSimple       200000 ns/op     6080 B/op     63 allocs/op
+BenchmarkConvertNested       125000 ns/op     6608 B/op     90 allocs/op
+BenchmarkConvertArray         16000 ns/op    26984 B/op    934 allocs/op
+BenchmarkConvertTabular       3000 ns/op     97368 B/op   3328 allocs/op
+BenchmarkConvertLargeFile      1200 ns/op   360137 B/op  10379 allocs/op
+BenchmarkConvertJSONC         120000 ns/op     6712 B/op     87 allocs/op
 ```
 
 ## License
