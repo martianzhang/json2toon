@@ -130,6 +130,30 @@ func ConvertJSONL(jsonlBytes []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// ConvertJSONLStream converts JSON Lines to TOON bytes using streaming mode.
+// Each line is processed and written immediately, separated by "---".
+// This is more memory-efficient for large JSONL files.
+func ConvertJSONLStream(jsonlBytes []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	converter := NewConverter(&buf)
+	if err := converter.ConvertJSONLStream(bytes.NewReader(jsonlBytes)); err != nil {
+		return nil, err
+	}
+	if err := converter.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ConvertJSONLStreamString converts JSON Lines string to TOON using streaming mode.
+func ConvertJSONLStreamString(jsonlStr string) (string, error) {
+	result, err := ConvertJSONLStream([]byte(jsonlStr))
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
 // ConvertJSONLString converts a JSONL string to TOON string.
 func ConvertJSONLString(jsonlStr string) (string, error) {
 	result, err := ConvertJSONL([]byte(jsonlStr))
@@ -149,6 +173,24 @@ func ConvertJSONLWithOptions(jsonlBytes []byte, opts ...ConverterOption) ([]byte
 	var buf bytes.Buffer
 	converter := NewConverterWithOptions(&buf, options)
 	if err := converter.ConvertJSONL(jsonlBytes); err != nil {
+		return nil, err
+	}
+	if err := converter.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ConvertJSONLStreamWithOptions converts JSONL to TOON with streaming mode and custom options.
+func ConvertJSONLStreamWithOptions(jsonlBytes []byte, opts ...ConverterOption) ([]byte, error) {
+	options := DefaultConverterOptions()
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	var buf bytes.Buffer
+	converter := NewConverterWithOptions(&buf, options)
+	if err := converter.ConvertJSONLStream(bytes.NewReader(jsonlBytes)); err != nil {
 		return nil, err
 	}
 	if err := converter.Close(); err != nil {

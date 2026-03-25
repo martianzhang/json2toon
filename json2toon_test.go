@@ -3,6 +3,7 @@ package json2toon
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -1979,20 +1980,282 @@ func TestIsJSONL(t *testing.T) {
 		{[]byte(`{"id": 1}
 {"id": 2}`), true},
 		{[]byte(`{"id": 1}
-  
+   
 {"id": 2}`), true},
 		{[]byte(`1
 2
-3`), false},
+3`), true}, // Primitives are now valid JSONL
 		{[]byte(`[1,2]
 [3,4]`), true},
 		{[]byte(`invalid
 {"id": 1}`), false},
+		{[]byte(`"a"
+"b"
+"c"`), true}, // String primitives (jq -r '.[]' on arrays)
+		{[]byte(`1
+2
+3
+invalid`), true}, // 3 valid out of 4 = 75% > 50% threshold
 	}
 	for _, tt := range tests {
 		result := isJSONL(tt.data)
 		if result != tt.expected {
 			t.Errorf("isJSONL(%q) = %v, want %v", string(tt.data), result, tt.expected)
+		}
+	}
+}
+
+// --- ConvertJSONLStream tests ---
+
+func TestConvertJSONLStreamBasic(t *testing.T) {
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "name": "Bob"}`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	// Should output with --- separators
+	if !bytes.Contains(result, []byte("---")) {
+		t.Errorf("expected --- separator: %s", result)
+	}
+	if !bytes.Contains(result, []byte("id: 1")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertJSONLStreamString(t *testing.T) {
+	jsonl := `{"id": 1}
+{"id": 2}`
+	result, err := ConvertJSONLStreamString(jsonl)
+	if err != nil {
+		t.Fatalf("ConvertJSONLStreamString failed: %v", err)
+	}
+	if !bytes.Contains([]byte(result), []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertJSONLStreamWithOptions(t *testing.T) {
+	// Test with tabular data which uses delimiter in header
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "name": "Bob"}`
+	result, err := ConvertJSONLStreamWithOptions([]byte(jsonl), WithDelimiter('|'))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStreamWithOptions failed: %v", err)
+	}
+	// In streaming mode, each line is converted individually (not tabular)
+	// so we just verify the output contains the expected data
+	if !bytes.Contains(result, []byte("Alice")) {
+		t.Errorf("missing Alice: %s", result)
+	}
+	if !bytes.Contains(result, []byte("Bob")) {
+		t.Errorf("missing Bob: %s", result)
+	}
+}
+
+func TestConvertJSONLStreamPrimitiveArray(t *testing.T) {
+	// Test with jq-style output (primitives from array)
+	jsonl := `"alice"
+"bob"
+"charlie"`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("alice")) {
+		t.Errorf("missing alice: %s", result)
+	}
+	if !bytes.Contains(result, []byte("bob")) {
+		t.Errorf("missing bob: %s", result)
+	}
+}
+
+func TestConvertJSONLStreamNumbers(t *testing.T) {
+	// Test with numbers (jq -r '.[]' on [1, 2, 3])
+	jsonl := `1
+2
+3`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	for _, num := range []string{"1", "2", "3"} {
+		if !bytes.Contains(result, []byte(num)) {
+			t.Errorf("missing %s: %s", num, result)
+		}
+	}
+}
+
+func TestConvertJSONLStreamBooleans(t *testing.T) {
+	// Test with booleans
+	jsonl := `true
+false
+true`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	for _, val := range []string{"true", "false"} {
+		if !bytes.Contains(result, []byte(val)) {
+			t.Errorf("missing %s: %s", val, result)
+		}
+	}
+}
+
+func TestConvertJSONLStreamNulls(t *testing.T) {
+	// Test with nulls
+	jsonl := `null
+"value"
+null`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	for _, val := range []string{"null", "value"} {
+		if !bytes.Contains(result, []byte(val)) {
+			t.Errorf("missing %s: %s", val, result)
+		}
+	}
+}
+
+func TestConvertJSONLStreamMixed(t *testing.T) {
+	// Test with mixed types (typical jq output)
+	jsonl := `{"id": 1}
+"string"
+123
+true`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	// Should have 3 --- separators for 4 items
+	separatorCount := bytes.Count(result, []byte("---"))
+	if separatorCount != 3 {
+		t.Errorf("expected 3 separators, got %d: %s", separatorCount, result)
+	}
+}
+
+func TestConvertJSONLStreamInvalidJSON(t *testing.T) {
+	// Invalid JSON should error
+	_, err := ConvertJSONLStream([]byte(`{invalid}
+{"id": 1}`))
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestConvertJSONLStreamEmpty(t *testing.T) {
+	// Empty input should produce empty output
+	result, err := ConvertJSONLStream([]byte(``))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected empty result, got: %s", result)
+	}
+}
+
+func TestConvertJSONLStreamBlankLines(t *testing.T) {
+	// Blank lines should be skipped
+	jsonl := `{"id": 1}
+
+{"id": 2}
+
+{"id": 3}`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	// Should have 2 separators for 3 items (blank lines skipped)
+	separatorCount := bytes.Count(result, []byte("---"))
+	if separatorCount != 2 {
+		t.Errorf("expected 2 separators, got %d: %s", separatorCount, result)
+	}
+}
+
+func TestConvertJSONLStreamNested(t *testing.T) {
+	// Test with nested objects
+	jsonl := `{"user": {"name": "Alice", "age": 30}}
+{"user": {"name": "Bob", "age": 25}}`
+	result, err := ConvertJSONLStream([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	for _, val := range []string{"Alice", "Bob"} {
+		if !bytes.Contains(result, []byte(val)) {
+			t.Errorf("missing %s: %s", val, result)
+		}
+	}
+}
+
+// --- Converter.ConvertJSONLStream tests ---
+
+func TestConverterConvertJSONLStream(t *testing.T) {
+	var buf bytes.Buffer
+	conv := NewConverter(&buf)
+	err := conv.ConvertJSONLStream(strings.NewReader(`{"id": 1}
+{"id": 2}`))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	if buf.Len() == 0 {
+		t.Error("expected non-empty output")
+	}
+}
+
+func TestConverterConvertJSONLStreamPrimitives(t *testing.T) {
+	var buf bytes.Buffer
+	conv := NewConverter(&buf)
+	err := conv.ConvertJSONLStream(strings.NewReader(`"a"
+"b"
+"c"`))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	for _, s := range []string{"a", "b", "c"} {
+		if !bytes.Contains(buf.Bytes(), []byte(s)) {
+			t.Errorf("missing %s: %s", s, buf.String())
+		}
+	}
+}
+
+func TestConverterConvertJSONLStreamArrays(t *testing.T) {
+	var buf bytes.Buffer
+	conv := NewConverter(&buf)
+	err := conv.ConvertJSONLStream(strings.NewReader(`[1, 2]
+[3, 4]`))
+	if err != nil {
+		t.Fatalf("ConvertJSONLStream failed: %v", err)
+	}
+	// Should have separators
+	if !bytes.Contains(buf.Bytes(), []byte("---")) {
+		t.Errorf("expected separators: %s", buf.String())
+	}
+}
+
+// --- isJSONLine tests ---
+
+func TestIsJSONLine(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected bool
+	}{
+		{`{"id": 1}`, true},
+		{`[1, 2, 3]`, true},
+		{`"string"`, true},
+		{`123`, true},
+		{`true`, true},
+		{`false`, true},
+		{`null`, true},
+		{``, false},
+		{`   `, false},
+		{`{invalid}`, false},
+		{`not json`, false},
+	}
+	for _, tt := range tests {
+		result := isJSONLine([]byte(tt.line))
+		if result != tt.expected {
+			t.Errorf("isJSONLine(%q) = %v, want %v", tt.line, result, tt.expected)
 		}
 	}
 }

@@ -10,13 +10,13 @@ config:
   timeout: 30.5
 tags:[3]: json,toon,converter
 users:
-- id: 1
+- email: alice@example.com
+  id: 1
   name: Alice
-  email: alice@example.com
   roles: [2]: admin,developer
-- id: 2
+- email: bob@example.com
+  id: 2
   name: Bob
-  email: bob@example.com
   roles: [1]: viewer
 metadata:
   created: "2024-01-15T10:30:00Z"

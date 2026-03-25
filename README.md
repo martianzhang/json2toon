@@ -43,6 +43,19 @@ echo '{"id": 1}' | j2t
 | `-delimiter` | `,` | Table delimiter (`,`, `\t`, `\|`) |
 | `-key-folding` | `""` | Key folding mode (`""`, `"safe"`, `"upper"`, `"lower"`) |
 | `-strict` | `false` | Enable strict TOON validation |
+| `-stream` | `false` | Enable streaming mode for JSONL (line-by-line processing) |
+
+### Using with jq
+
+The `-stream` flag enables processing line-by-line output, which is useful when combined with `jq`:
+
+```bash
+# Convert JSONL by merging lines into array first
+cat data.jsonl | jq -s '.' | j2t
+
+# Convert each JSONL object individually (keeps objects separate)
+cat data.jsonl | jq -c '.' | j2t -stream
+```
 
 ## Library Quick Start
 
@@ -96,6 +109,9 @@ err := json2toon.ConvertFileToWriter("config.json", writer)
 
 // JSON Lines to TOON
 result, err := json2toon.ConvertJSONL(jsonLines)
+
+// Streaming JSONL (line-by-line, more memory-efficient)
+result, err := json2toon.ConvertJSONLStream(jsonLines)
 ```
 
 ### Streaming
@@ -107,6 +123,9 @@ defer converter.Close()
 err := converter.ConvertJSON(jsonBytes)
 // or
 err := converter.ConvertJSONC(jsoncBytes)
+
+// Streaming JSONL (line-by-line)
+err := converter.ConvertJSONLStream(reader)
 ```
 
 ### Options

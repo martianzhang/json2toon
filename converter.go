@@ -31,8 +31,7 @@ func mayContainComments(data []byte) bool {
 // isJSONL checks if data is JSON Lines format.
 // Returns true if:
 //  1. Multiple lines exist
-//  2. Most non-empty lines are complete JSON objects/arrays (start and end properly)
-//  3. Each line parses as valid JSON when trimmed
+//  2. Most non-empty lines are valid JSON values (objects, arrays, or primitives)
 func isJSONL(data []byte) bool {
 	lines := bytes.Split(data, []byte{'\n'})
 	if len(lines) < 2 {
@@ -43,23 +42,18 @@ func isJSONL(data []byte) bool {
 	totalLines := 0
 
 	for _, line := range lines {
-		trimmed := bytes.TrimSpace(line)
-		if len(trimmed) == 0 {
-			continue
-		}
-		totalLines++
-
-		// Check if line looks like a complete JSON object or array
-		if (trimmed[0] == '{' && trimmed[len(trimmed)-1] == '}') ||
-			(trimmed[0] == '[' && trimmed[len(trimmed)-1] == ']') {
-			// Verify it's valid JSON
-			if json.Valid(trimmed) {
-				validLines++
+		if isJSONLine(line) {
+			validLines++
+			totalLines++
+		} else {
+			trimmed := bytes.TrimSpace(line)
+			if len(trimmed) > 0 {
+				totalLines++
 			}
 		}
 	}
 
-	// If we have 2+ lines and most are valid complete JSON objects, it's JSONL
+	// If we have 2+ lines and most are valid JSON, it's JSONL
 	return totalLines >= 2 && validLines >= 2 && float64(validLines)/float64(totalLines) > 0.5
 }
 
@@ -105,7 +99,8 @@ func (c *Converter) ConvertJSON(jsonBytes []byte) error {
 	}
 
 	if token == nil {
-		return nil
+		// JSON null value - encode it
+		return c.encodePrimitive(nil)
 	}
 
 	delim, ok := token.(json.Delim)
@@ -139,11 +134,30 @@ func (c *Converter) ConvertJSONC(jsoncBytes []byte) error {
 	return c.ConvertJSON(cleaned)
 }
 
+// isJSONLine checks if a single line looks like a valid JSON value (object, array, or primitive).
+func isJSONLine(line []byte) bool {
+	trimmed := bytes.TrimSpace(line)
+	if len(trimmed) == 0 {
+		return false
+	}
+	// Check for complete JSON values
+	if json.Valid(trimmed) {
+		return true
+	}
+	return false
+}
+
 // ConvertJSONL converts JSON Lines (JSONL) to TOON.
-// Each line is parsed as a separate JSON object.
-// If all objects have the same keys, output is in tabular format.
+// Each line is parsed as a separate JSON value.
+// If all lines are objects with the same keys, output is in tabular format.
 func (c *Converter) ConvertJSONL(jsonlBytes []byte) error {
-	scanner := bufio.NewScanner(bytes.NewReader(jsonlBytes))
+	return c.ConvertJSONLFromReader(bytes.NewReader(jsonlBytes))
+}
+
+// ConvertJSONLFromReader converts JSON Lines from an io.Reader to TOON.
+// This is more memory-efficient than ConvertJSONL for large inputs.
+func (c *Converter) ConvertJSONLFromReader(r io.Reader) error {
+	scanner := bufio.NewScanner(r)
 
 	type lineData struct {
 		raw    []byte
@@ -222,6 +236,40 @@ func (c *Converter) ConvertJSONL(jsonlBytes []byte) error {
 	}
 
 	return nil
+}
+
+// ConvertJSONLStream converts JSON Lines to TOON in streaming mode.
+// Each line is processed and written immediately, separated by "---".
+// This is the most memory-efficient option for large JSONL files.
+func (c *Converter) ConvertJSONLStream(r io.Reader) error {
+	scanner := bufio.NewScanner(r)
+	first := true
+
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+
+		// Validate it's valid JSON
+		if !json.Valid(line) {
+			return fmt.Errorf("invalid JSON on line: %s", string(line))
+		}
+
+		if !first {
+			// Add separator between JSON values
+			if _, err := c.w.Write([]byte("\n---\n")); err != nil {
+				return err
+			}
+		}
+		first = false
+
+		if err := c.ConvertJSON(line); err != nil {
+			return err
+		}
+	}
+
+	return scanner.Err()
 }
 
 // ConvertAuto auto-detects and converts the input format (JSON/JSONC/JSONL) to TOON.
@@ -558,9 +606,10 @@ func (c *Converter) writeArrayListStream(items []interface{}) error {
 		switch val := item.(type) {
 		case map[string]interface{}:
 			c.encoder.depth++
-			first := true
-			for k, v := range val {
-				if !first {
+			keys := makeSortedKeys(val)
+			for i, k := range keys {
+				v := val[k]
+				if i > 0 {
 					if _, err := c.w.Write([]byte("\n")); err != nil {
 						return err
 					}
@@ -569,7 +618,6 @@ func (c *Converter) writeArrayListStream(items []interface{}) error {
 						return err
 					}
 				}
-				first = false
 				if _, err := c.w.Write([]byte(k + ": ")); err != nil {
 					return err
 				}
