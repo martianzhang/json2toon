@@ -99,7 +99,7 @@ Examples:
 		switch ext {
 		case ".toon":
 			isDecode = true
-		case ".json", ".jsonc", ".jsonl", ".jsonl.gz":
+		case ".json", ".jsonc", ".jsonl":
 			isDecode = false
 		}
 	}
