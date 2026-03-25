@@ -1,13 +1,78 @@
 package json2toon
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 )
+
+// mayContainComments checks if data may contain JSONC comments (// or /*).
+func mayContainComments(data []byte) bool {
+	inString := false
+	for i := 0; i < len(data); i++ {
+		if data[i] == '"' && (i == 0 || data[i-1] != '\\') {
+			inString = !inString
+			continue
+		}
+		if !inString && i+1 < len(data) {
+			if data[i] == '/' && (data[i+1] == '/' || data[i+1] == '*') {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isJSONL checks if data is JSON Lines format.
+// Returns true if:
+//  1. Multiple lines exist
+//  2. Most non-empty lines are complete JSON objects/arrays (start and end properly)
+//  3. Each line parses as valid JSON when trimmed
+func isJSONL(data []byte) bool {
+	lines := bytes.Split(data, []byte{'\n'})
+	if len(lines) < 2 {
+		return false
+	}
+
+	validLines := 0
+	totalLines := 0
+
+	for _, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+		if len(trimmed) == 0 {
+			continue
+		}
+		totalLines++
+
+		// Check if line looks like a complete JSON object or array
+		if (trimmed[0] == '{' && trimmed[len(trimmed)-1] == '}') ||
+			(trimmed[0] == '[' && trimmed[len(trimmed)-1] == ']') {
+			// Verify it's valid JSON
+			if json.Valid(trimmed) {
+				validLines++
+			}
+		}
+	}
+
+	// If we have 2+ lines and most are valid complete JSON objects, it's JSONL
+	return totalLines >= 2 && validLines >= 2 && float64(validLines)/float64(totalLines) > 0.5
+}
+
+// DetectFormat detects the input format: JSON, JSONC, or JSONL.
+func DetectFormat(data []byte) string {
+	if mayContainComments(data) {
+		return "jsonc"
+	}
+	if isJSONL(data) {
+		return "jsonl"
+	}
+	return "json"
+}
 
 type Converter struct {
 	encoder *Encoder
@@ -72,6 +137,104 @@ func (c *Converter) ConvertJSONC(jsoncBytes []byte) error {
 		return err
 	}
 	return c.ConvertJSON(cleaned)
+}
+
+// ConvertJSONL converts JSON Lines (JSONL) to TOON.
+// Each line is parsed as a separate JSON object.
+// If all objects have the same keys, output is in tabular format.
+func (c *Converter) ConvertJSONL(jsonlBytes []byte) error {
+	scanner := bufio.NewScanner(bytes.NewReader(jsonlBytes))
+
+	type lineData struct {
+		raw    []byte
+		keys   []string
+		values map[string]interface{}
+	}
+	var lines []lineData
+	isTabular := true
+	var expectedKeys []string
+
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+
+		var obj map[string]interface{}
+		if err := json.Unmarshal(line, &obj); err != nil {
+			isTabular = false
+		} else {
+			keys := make([]string, 0, len(obj))
+			for k := range obj {
+				keys = append(keys, k)
+			}
+
+			if expectedKeys == nil {
+				expectedKeys = keys
+			} else if !sameKeys(expectedKeys, keys) {
+				isTabular = false
+			}
+
+			lines = append(lines, lineData{
+				raw:    line,
+				keys:   keys,
+				values: obj,
+			})
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	delim := string(c.encoder.opts.Delimiter)
+
+	if isTabular && len(lines) > 0 {
+		header := fmt.Sprintf("[%d]{%s}:\n", len(lines), strings.Join(expectedKeys, delim))
+		if _, err := c.w.Write([]byte(header)); err != nil {
+			return err
+		}
+
+		for _, line := range lines {
+			values := make([]string, len(expectedKeys))
+			for i, k := range expectedKeys {
+				values[i] = c.formatPrimitiveValue(line.values[k], delim)
+			}
+			if _, err := c.w.Write([]byte("  " + strings.Join(values, delim))); err != nil {
+				return err
+			}
+			if _, err := c.w.Write([]byte("\n")); err != nil {
+				return err
+			}
+		}
+	} else {
+		for i, line := range lines {
+			if i > 0 {
+				if _, err := c.w.Write([]byte("---\n")); err != nil {
+					return err
+				}
+			}
+			conv := NewConverterWithOptions(c.w, c.opts)
+			if err := conv.ConvertJSON(line.raw); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// ConvertAuto auto-detects and converts the input format (JSON/JSONC/JSONL) to TOON.
+func (c *Converter) ConvertAuto(data []byte) error {
+	format := DetectFormat(data)
+	switch format {
+	case "jsonc":
+		return c.ConvertJSONC(data)
+	case "jsonl":
+		return c.ConvertJSONL(data)
+	default:
+		return c.ConvertJSON(data)
+	}
 }
 
 func (c *Converter) Close() error {
@@ -148,6 +311,10 @@ func (c *Converter) writeValueStream(token interface{}, decoder *json.Decoder) (
 			if err != nil {
 				return false, err
 			}
+			// Consume the closing ']'
+			if _, err := decoder.Token(); err != nil {
+				return false, err
+			}
 			return false, c.writeArrayDirect(items)
 		}
 		return false, nil
@@ -179,6 +346,10 @@ func (c *Converter) collectArrayItems(decoder *json.Decoder) ([]interface{}, err
 			case '[':
 				subArr, err := c.collectArrayItems(decoder)
 				if err != nil {
+					return nil, err
+				}
+				// Consume the closing ']'
+				if _, err := decoder.Token(); err != nil {
 					return nil, err
 				}
 				items = append(items, subArr)
@@ -223,6 +394,10 @@ func (c *Converter) decodeObjectToMap(decoder *json.Decoder) (map[string]interfa
 				if err != nil {
 					return nil, err
 				}
+				// Consume the closing ']'
+				if _, err := decoder.Token(); err != nil {
+					return nil, err
+				}
 				m[key] = subArr
 			default:
 				m[key] = valueToken
@@ -230,6 +405,11 @@ func (c *Converter) decodeObjectToMap(decoder *json.Decoder) (map[string]interfa
 		} else {
 			m[key] = valueToken
 		}
+	}
+
+	// Consume the closing '}'
+	if _, err := decoder.Token(); err != nil {
+		return nil, err
 	}
 
 	return m, nil
@@ -325,6 +505,43 @@ func (c *Converter) isPrimitive(v interface{}) bool {
 	return false
 }
 
+// writeObjectDirect writes a nested object in list format (key: value per line).
+func (c *Converter) writeObjectDirect(m map[string]interface{}) error {
+	c.encoder.depth++
+	first := true
+	for k, v := range m {
+		if !first {
+			if _, err := c.w.Write([]byte("\n")); err != nil {
+				return err
+			}
+			indent := strings.Repeat(" ", c.encoder.depth*2)
+			if _, err := c.w.Write([]byte(indent)); err != nil {
+				return err
+			}
+		}
+		first = false
+		if _, err := c.w.Write([]byte(k + ": ")); err != nil {
+			return err
+		}
+		switch v2 := v.(type) {
+		case []interface{}:
+			if err := c.writeArrayDirect(v2); err != nil {
+				return err
+			}
+		case map[string]interface{}:
+			if err := c.writeObjectDirect(v2); err != nil {
+				return err
+			}
+		default:
+			if err := c.encodePrimitive(v); err != nil {
+				return err
+			}
+		}
+	}
+	c.encoder.depth--
+	return nil
+}
+
 func (c *Converter) writeArrayListStream(items []interface{}) error {
 	for _, item := range items {
 		if _, err := c.w.Write([]byte("\n")); err != nil {
@@ -356,8 +573,19 @@ func (c *Converter) writeArrayListStream(items []interface{}) error {
 				if _, err := c.w.Write([]byte(k + ": ")); err != nil {
 					return err
 				}
-				if err := c.encodePrimitive(v); err != nil {
-					return err
+				switch v2 := v.(type) {
+				case []interface{}:
+					if err := c.writeArrayDirect(v2); err != nil {
+						return err
+					}
+				case map[string]interface{}:
+					if err := c.writeObjectDirect(v2); err != nil {
+						return err
+					}
+				default:
+					if err := c.encodePrimitive(v); err != nil {
+						return err
+					}
 				}
 			}
 			c.encoder.depth--
@@ -466,4 +694,19 @@ func makeSortedKeys(m map[string]interface{}) []string {
 		}
 	}
 	return keys
+}
+
+// sameKeys checks if two key slices contain the same elements.
+func sameKeys(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	slices.Sort(a)
+	slices.Sort(b)
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

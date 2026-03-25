@@ -519,9 +519,13 @@ func TestIsTabularWithNonPrimitive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Convert failed: %v", err)
 	}
-	// Objects with identical keys (even if values are non-primitive) produce tabular format.
-	if !bytes.Contains(result, []byte("id,tags")) {
-		t.Errorf("expected tabular format with id,tags: %s", result)
+	// Objects with non-primitive values produce list format, not tabular.
+	if bytes.Contains(result, []byte("id,tags")) {
+		t.Errorf("should NOT be tabular with non-primitive values: %s", result)
+	}
+	// Should contain items key
+	if !bytes.Contains(result, []byte("items")) {
+		t.Errorf("missing items: %s", result)
 	}
 }
 
@@ -1689,5 +1693,296 @@ func TestConvertFileWithOptionsInvalidFile(t *testing.T) {
 	_, err := ConvertFileWithOptions("nonexistent.json", WithIndent(4))
 	if err == nil {
 		t.Error("expected error for nonexistent file")
+	}
+}
+
+// --- ConvertJSONL tests ---
+
+func TestConvertJSONLBasic(t *testing.T) {
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "name": "Bob"}`
+	result, err := ConvertJSONL([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	// Should output tabular format
+	if !bytes.Contains(result, []byte("[2]{id,name}:")) {
+		t.Errorf("expected tabular format: %s", result)
+	}
+}
+
+func TestConvertJSONLString(t *testing.T) {
+	jsonl := `{"id": 1}
+{"id": 2}`
+	result, err := ConvertJSONLString(jsonl)
+	if err != nil {
+		t.Fatalf("ConvertJSONLString failed: %v", err)
+	}
+	if !bytes.Contains([]byte(result), []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertJSONLWithOptions(t *testing.T) {
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "name": "Bob"}`
+	result, err := ConvertJSONLWithOptions([]byte(jsonl), WithDelimiter('|'))
+	if err != nil {
+		t.Fatalf("ConvertJSONLWithOptions failed: %v", err)
+	}
+	// Should have tabular format with pipe delimiter in header and rows
+	// Keys are sorted, so "id" comes before "name"
+	if !bytes.Contains(result, []byte("{id|name}:")) {
+		t.Errorf("expected tabular header with id|name: %s", result)
+	}
+	if !bytes.Contains(result, []byte("|")) {
+		t.Errorf("expected pipe delimiter in rows: %s", result)
+	}
+}
+
+func TestConvertJSONLNonTabular(t *testing.T) {
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "other": "Bob"}`
+	result, err := ConvertJSONL([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	// Different keys → non-tabular with --- separators
+	if !bytes.Contains(result, []byte("---")) {
+		t.Errorf("expected separator for non-tabular: %s", result)
+	}
+}
+
+func TestConvertJSONLEmpty(t *testing.T) {
+	result, err := ConvertJSONL([]byte(""))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected empty result, got: %s", result)
+	}
+}
+
+func TestConvertJSONLSingleLine(t *testing.T) {
+	// Single line is not really JSONL, but should handle gracefully
+	result, err := ConvertJSONL([]byte(`{"id": 1}`))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	if len(result) == 0 {
+		t.Error("expected some output")
+	}
+}
+
+func TestConvertJSONLMixedWithPrimitives(t *testing.T) {
+	jsonl := `{"id": 1}
+"just a string"
+{"id": 2}`
+	result, err := ConvertJSONL([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	// Primitive lines make it non-tabular
+	if !bytes.Contains(result, []byte("---")) {
+		t.Errorf("expected separator for mixed JSONL: %s", result)
+	}
+}
+
+func TestConvertJSONLWithBlankLines(t *testing.T) {
+	jsonl := `{"id": 1}
+
+{"id": 2}`
+	result, err := ConvertJSONL([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("[2]")) {
+		t.Errorf("expected tabular with 2 items: %s", result)
+	}
+}
+
+// --- ConvertAuto tests ---
+
+func TestConvertAutoJSON(t *testing.T) {
+	json := `{"id": 1}`
+	result, err := ConvertAuto([]byte(json))
+	if err != nil {
+		t.Fatalf("ConvertAuto failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertAutoJSONString(t *testing.T) {
+	json := `{"id": 1}`
+	result, err := ConvertAutoString(json)
+	if err != nil {
+		t.Fatalf("ConvertAutoString failed: %v", err)
+	}
+	if !bytes.Contains([]byte(result), []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertAutoWithOptions(t *testing.T) {
+	json := `{"id": 1}`
+	result, err := ConvertAutoWithOptions([]byte(json), WithIndent(4))
+	if err != nil {
+		t.Fatalf("ConvertAutoWithOptions failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertAutoJSONC(t *testing.T) {
+	jsonc := `{"id": 1} // comment`
+	result, err := ConvertAuto([]byte(jsonc))
+	if err != nil {
+		t.Fatalf("ConvertAuto failed: %v", err)
+	}
+	// Should handle as JSONC (contains comment marker)
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertAutoJSONL(t *testing.T) {
+	jsonl := `{"id": 1}
+{"id": 2}`
+	result, err := ConvertAuto([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertAuto failed: %v", err)
+	}
+	// Should handle as JSONL
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertAutoFile(t *testing.T) {
+	tmp, err := os.CreateTemp("", "test*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	_, err = tmp.WriteString(`{"test": 123}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	result, err := ConvertAutoFile(tmp.Name())
+	if err != nil {
+		t.Fatalf("ConvertAutoFile failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("test")) {
+		t.Errorf("missing test: %s", result)
+	}
+}
+
+func TestConvertAutoFileJSONC(t *testing.T) {
+	tmp, err := os.CreateTemp("", "test*.jsonc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	_, err = tmp.WriteString(`{"id": 1} // comment`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	result, err := ConvertAutoFile(tmp.Name())
+	if err != nil {
+		t.Fatalf("ConvertAutoFile failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id: %s", result)
+	}
+}
+
+func TestConvertAutoFileNotFound(t *testing.T) {
+	_, err := ConvertAutoFile("nonexistent.json")
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+// --- DetectFormat tests ---
+
+func TestDetectFormat(t *testing.T) {
+	tests := []struct {
+		data     []byte
+		expected string
+	}{
+		{[]byte(`{"id": 1}`), "json"},
+		{[]byte(`[1, 2, 3]`), "json"},
+		{[]byte(`{"id": 1} // comment`), "jsonc"},
+		{[]byte(`{"id": 1} /* comment */`), "jsonc"},
+		{[]byte(`{"id": 1}
+{"id": 2}`), "jsonl"},
+		{[]byte("[1]\n[2]"), "jsonl"},
+	}
+	for _, tt := range tests {
+		result := DetectFormat(tt.data)
+		if result != tt.expected {
+			t.Errorf("DetectFormat(%q) = %q, want %q", string(tt.data), result, tt.expected)
+		}
+	}
+}
+
+// --- mayContainComments tests ---
+
+func TestMayContainComments(t *testing.T) {
+	tests := []struct {
+		data     []byte
+		expected bool
+	}{
+		{[]byte(`{"key": "value"}`), false},
+		{[]byte(`{"url": "http://example.com"}`), false},
+		{[]byte(`{"key": "value"} // comment`), true},
+		{[]byte(`{"key": "value"} /* comment */`), true},
+		{[]byte(`// full line comment
+{"key": 1}`), true},
+		{[]byte(`{"url": "https://example.com/api"}`), false},
+	}
+	for _, tt := range tests {
+		result := mayContainComments(tt.data)
+		if result != tt.expected {
+			t.Errorf("mayContainComments(%q) = %v, want %v", string(tt.data), result, tt.expected)
+		}
+	}
+}
+
+// --- isJSONL tests ---
+
+func TestIsJSONL(t *testing.T) {
+	tests := []struct {
+		data     []byte
+		expected bool
+	}{
+		{[]byte(`{"id": 1}`), false},
+		{[]byte(`{"id": 1}
+{"id": 2}`), true},
+		{[]byte(`{"id": 1}
+  
+{"id": 2}`), true},
+		{[]byte(`1
+2
+3`), false},
+		{[]byte(`[1,2]
+[3,4]`), true},
+		{[]byte(`invalid
+{"id": 1}`), false},
+	}
+	for _, tt := range tests {
+		result := isJSONL(tt.data)
+		if result != tt.expected {
+			t.Errorf("isJSONL(%q) = %v, want %v", string(tt.data), result, tt.expected)
+		}
 	}
 }

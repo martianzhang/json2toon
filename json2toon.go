@@ -117,6 +117,86 @@ func ConvertJSONCWithOptions(jsoncBytes []byte, opts ...ConverterOption) ([]byte
 	return buf.Bytes(), nil
 }
 
+// ConvertJSONL converts JSON Lines (JSONL) to TOON bytes.
+func ConvertJSONL(jsonlBytes []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	converter := NewConverter(&buf)
+	if err := converter.ConvertJSONL(jsonlBytes); err != nil {
+		return nil, err
+	}
+	if err := converter.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ConvertJSONLString converts a JSONL string to TOON string.
+func ConvertJSONLString(jsonlStr string) (string, error) {
+	result, err := ConvertJSONL([]byte(jsonlStr))
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+// ConvertJSONLWithOptions converts JSONL to TOON with custom options.
+func ConvertJSONLWithOptions(jsonlBytes []byte, opts ...ConverterOption) ([]byte, error) {
+	options := DefaultConverterOptions()
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	var buf bytes.Buffer
+	converter := NewConverterWithOptions(&buf, options)
+	if err := converter.ConvertJSONL(jsonlBytes); err != nil {
+		return nil, err
+	}
+	if err := converter.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ConvertAuto auto-detects and converts input format (JSON/JSONC/JSONL) to TOON.
+func ConvertAuto(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	converter := NewConverter(&buf)
+	if err := converter.ConvertAuto(data); err != nil {
+		return nil, err
+	}
+	if err := converter.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ConvertAutoString converts input string to TOON with auto format detection.
+func ConvertAutoString(s string) (string, error) {
+	result, err := ConvertAuto([]byte(s))
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+// ConvertAutoWithOptions converts to TOON with auto format detection and custom options.
+func ConvertAutoWithOptions(data []byte, opts ...ConverterOption) ([]byte, error) {
+	options := DefaultConverterOptions()
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	var buf bytes.Buffer
+	converter := NewConverterWithOptions(&buf, options)
+	if err := converter.ConvertAuto(data); err != nil {
+		return nil, err
+	}
+	if err := converter.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // ConvertFile converts a JSON file to TOON bytes.
 func ConvertFile(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
@@ -147,4 +227,13 @@ func ConvertFileWithOptions(path string, opts ...ConverterOption) ([]byte, error
 		return nil, err
 	}
 	return ConvertWithOptions(data, opts...)
+}
+
+// ConvertAutoFile converts a file with auto-detected format to TOON bytes.
+func ConvertAutoFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ConvertAuto(data)
 }
