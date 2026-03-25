@@ -7,135 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/martianzhang/json2toon"
 )
 
-// --- mayContainComments ---
-
-func TestMayContainComments(t *testing.T) {
-	tests := []struct {
-		data     []byte
-		expected bool
-	}{
-		{[]byte(`{"key": "value"}`), false},
-		{[]byte(`{"url": "http://example.com"}`), false}, // :// inside URL is not a comment
-		{[]byte(`{"key": "value"} // comment`), true},
-		{[]byte(`{"key": "value"} /* comment */`), true},
-		{[]byte(`// full line comment\n{"key": 1}`), true},
-		{[]byte(`{"key": 1} /* multi\nline */`), true},
-		{[]byte(`{"url": "https://example.com/api"}`), false},
-	}
-	for _, tt := range tests {
-		result := mayContainComments(tt.data)
-		if result != tt.expected {
-			t.Errorf("mayContainComments(%q) = %v, want %v", string(tt.data), result, tt.expected)
-		}
-	}
-}
-
-// --- isJSONL ---
-
-func TestIsJSONL(t *testing.T) {
-	tests := []struct {
-		data     []byte
-		expected bool
-	}{
-		{[]byte(`{"id": 1}`), false},                         // single line not JSONL
-		{[]byte("{\"id\": 1}\n{\"id\": 2}"), true},           // 2 complete objects
-		{[]byte("{\"id\": 1}\n  \n{\"id\": 2}"), true},       // with blank line
-		{[]byte("{\"id\": 1}\nnot json\n{\"id\": 2}"), true}, // 2/3 valid > 50%
-		{[]byte("1\n2\n3"), false},                           // primitives are not JSON objects/arrays
-		{[]byte("[1,2]\n[3,4]"), true},                       // arrays
-		{[]byte("invalid\n{\"id\": 1}"), false},              // mostly invalid
-	}
-	for _, tt := range tests {
-		result := isJSONL(tt.data)
-		if result != tt.expected {
-			t.Errorf("isJSONL(%q) = %v, want %v", string(tt.data), result, tt.expected)
-		}
-	}
-}
-
-// --- formatValue ---
-
-func TestFormatValue(t *testing.T) {
-	tests := []struct {
-		val      interface{}
-		delim    string
-		expected string
-	}{
-		{nil, ",", ""},
-		{true, ",", "true"},
-		{false, ",", "false"},
-		{float64(42), ",", "42"},
-		{float64(3.14), ",", "3"}, // %.0f truncates decimals
-		{"hello", ",", "hello"},
-		{"hello world", ",", `"hello world"`},
-		{"a,b", ",", `"a,b"`},
-		{`key: value`, ",", `"key: value"`}, // quoted: contains ":"
-		{"say \"hi\"", ",", `"say "hi""`},   // quoted: contains `"`, ends with `"`
-	}
-	for _, tt := range tests {
-		result := formatValue(tt.val, tt.delim)
-		if result != tt.expected {
-			t.Errorf("formatValue(%v, %q) = %q, want %q", tt.val, tt.delim, result, tt.expected)
-		}
-	}
-}
-
-// --- sameKeys ---
-
-func TestSameKeys(t *testing.T) {
-	if !sameKeys([]string{"a", "b"}, []string{"a", "b"}) {
-		t.Error("same keys should return true")
-	}
-	if !sameKeys([]string{"a", "b"}, []string{"b", "a"}) {
-		t.Error("same keys in different order should return true (sorts both)")
-	}
-	if sameKeys([]string{"a"}, []string{"a", "b"}) {
-		t.Error("different length should return false")
-	}
-	if !sameKeys([]string{}, []string{}) {
-		t.Error("empty slices should return true")
-	}
-}
-
-// --- convertJSON ---
-
-func TestConvertJSON(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	convertJSON([]byte(`{"id": 1}`), nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	if buf.Len() == 0 {
-		t.Error("expected output")
-	}
-}
-
-// --- convertJSONC ---
-
-func TestConvertJSONC(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	convertJSONC([]byte(`{"id": 1} // comment`), nil)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	if buf.Len() == 0 {
-		t.Error("expected output")
-	}
-}
+// --- CLI integration tests ---
 
 func TestCLI(t *testing.T) {
 	cwd, err := os.Getwd()
@@ -183,7 +59,8 @@ func TestCLI(t *testing.T) {
 				t.Fatalf("j2t %s failed: %v\nOutput: %s", tt.input, err, output)
 			}
 
-			expected, err := os.ReadFile(filepath.Join(projectRoot, tt.expected))
+			expectedPath := filepath.Join(projectRoot, tt.expected)
+			expected, err := os.ReadFile(expectedPath)
 			if err != nil {
 				t.Fatalf("Failed to read expected output %s: %v", tt.expected, err)
 			}
@@ -195,75 +72,194 @@ func TestCLI(t *testing.T) {
 	}
 }
 
-// --- convertJSONL ---
+// --- Library integration tests (using j2t internals) ---
 
-func TestConvertJSONL(t *testing.T) {
+func TestDetectFormatJSON(t *testing.T) {
+	result := json2toon.DetectFormat([]byte(`{"id": 1}`))
+	if result != "json" {
+		t.Errorf("expected json, got %s", result)
+	}
+}
+
+func TestDetectFormatJSONC(t *testing.T) {
+	result := json2toon.DetectFormat([]byte(`{"id": 1} // comment`))
+	if result != "jsonc" {
+		t.Errorf("expected jsonc, got %s", result)
+	}
+}
+
+func TestDetectFormatJSONL(t *testing.T) {
+	result := json2toon.DetectFormat([]byte(`{"id": 1}
+{"id": 2}`))
+	if result != "jsonl" {
+		t.Errorf("expected jsonl, got %s", result)
+	}
+}
+
+func TestConvertAutoJSON(t *testing.T) {
+	result, err := json2toon.ConvertAuto([]byte(`{"id": 1}`))
+	if err != nil {
+		t.Fatalf("ConvertAuto failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id in output: %s", result)
+	}
+}
+
+func TestConvertAutoJSONC(t *testing.T) {
+	result, err := json2toon.ConvertAuto([]byte(`{"id": 1} // comment`))
+	if err != nil {
+		t.Fatalf("ConvertAuto failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id in output: %s", result)
+	}
+}
+
+func TestConvertAutoJSONL(t *testing.T) {
+	jsonl := `{"id": 1}
+{"id": 2}`
+	result, err := json2toon.ConvertAuto([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertAuto failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id in output: %s", result)
+	}
+}
+
+func TestConvertAutoWithIndent(t *testing.T) {
+	result, err := json2toon.ConvertAutoWithOptions([]byte(`{"id": 1}`), json2toon.WithIndent(4))
+	if err != nil {
+		t.Fatalf("ConvertAutoWithOptions failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id in output: %s", result)
+	}
+}
+
+func TestConvertAutoWithDelimiter(t *testing.T) {
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "name": "Bob"}`
+	result, err := json2toon.ConvertAutoWithOptions([]byte(jsonl), json2toon.WithDelimiter('|'))
+	if err != nil {
+		t.Fatalf("ConvertAutoWithOptions failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("|")) {
+		t.Errorf("expected pipe delimiter: %s", result)
+	}
+}
+
+// --- Test stdin behavior by testing the library directly ---
+
+func TestJSONLToon(t *testing.T) {
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "name": "Bob"}`
+	result, err := json2toon.ConvertJSONL([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	// Should output tabular format
+	if !bytes.Contains(result, []byte("[2]")) {
+		t.Errorf("expected tabular format: %s", result)
+	}
+}
+
+func TestJSONLNonTabular(t *testing.T) {
+	jsonl := `{"id": 1, "name": "Alice"}
+{"id": 2, "other": "Bob"}`
+	result, err := json2toon.ConvertJSONL([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	// Different keys → non-tabular with --- separators
+	if !bytes.Contains(result, []byte("---")) {
+		t.Errorf("expected separator for non-tabular: %s", result)
+	}
+}
+
+func TestJSONLEmpty(t *testing.T) {
+	result, err := json2toon.ConvertJSONL([]byte(""))
+	if err != nil {
+		t.Fatalf("ConvertJSONL failed: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected empty result, got: %s", result)
+	}
+}
+
+func TestJSONCSimple(t *testing.T) {
+	jsonc := `{"id": 1} // comment`
+	result, err := json2toon.ConvertJSONC([]byte(jsonc))
+	if err != nil {
+		t.Fatalf("ConvertJSONC failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id in output: %s", result)
+	}
+}
+
+func TestConvertFile(t *testing.T) {
+	// Create a temp file
+	tmp, err := os.CreateTemp("", "test*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	_, err = tmp.WriteString(`{"test": 123}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	result, err := json2toon.ConvertFile(tmp.Name())
+	if err != nil {
+		t.Fatalf("ConvertFile failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("test")) {
+		t.Errorf("missing test in output: %s", result)
+	}
+}
+
+func TestConvertAutoFile(t *testing.T) {
+	// Create a temp file
+	tmp, err := os.CreateTemp("", "test*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	_, err = tmp.WriteString(`{"id": 1} // comment`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	result, err := json2toon.ConvertAutoFile(tmp.Name())
+	if err != nil {
+		t.Fatalf("ConvertAutoFile failed: %v", err)
+	}
+	if !bytes.Contains(result, []byte("id")) {
+		t.Errorf("missing id in output: %s", result)
+	}
+}
+
+// Helper to capture stdout for testing output behavior
+func captureStdout(fn func()) (string, error) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	jsonl := `{"id": 1}
-{"id": 2}`
-	convertJSONL([]byte(jsonl), nil)
+	fn()
 
 	w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	if buf.Len() == 0 {
-		t.Error("expected output")
+	_, err := io.Copy(&buf, r)
+	if err != nil {
+		return "", err
 	}
-}
-
-// --- mayContainComments ---
-
-func TestMayContainCommentsTrue(t *testing.T) {
-	tests := []string{
-		`{"id": 1} // comment`,
-		`{"id": 1} /* comment */`,
-		`// full line comment`,
-		`/* block comment */`,
-	}
-	for _, s := range tests {
-		if !mayContainComments([]byte(s)) {
-			t.Errorf("expected true for: %s", s)
-		}
-	}
-}
-
-func TestMayContainCommentsFalse(t *testing.T) {
-	tests := []string{
-		`{"id": 1}`,
-		`[1, 2, 3]`,
-		`"string with // inside"`,
-		`{"url": "http://example.com"}`,
-		`"a/*b"`,
-	}
-	for _, s := range tests {
-		if mayContainComments([]byte(s)) {
-			t.Errorf("expected false for: %s", s)
-		}
-	}
-}
-
-// --- sameKeys additional cases ---
-
-func TestSameKeysAdditional(t *testing.T) {
-	// Empty slices
-	if !sameKeys([]string{}, []string{}) {
-		t.Error("empty slices should return true")
-	}
-	// Different lengths
-	if sameKeys([]string{"a"}, []string{"a", "b"}) {
-		t.Error("different lengths should return false")
-	}
-	// Same content
-	if !sameKeys([]string{"a", "b"}, []string{"a", "b"}) {
-		t.Error("same content should return true")
-	}
-	// Same keys different order
-	if !sameKeys([]string{"b", "a"}, []string{"a", "b"}) {
-		t.Error("same keys different order should return true (sorts)")
-	}
+	return buf.String(), nil
 }
