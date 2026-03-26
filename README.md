@@ -1,8 +1,12 @@
-# json2toon
+<p align="center">
+  <img src="json2toon.png" alt="JSON2TOON" />
+</p>
+
+# JSON2TOON
 
 JSON/JSONC/JSONL to TOON (and back) converter library written in Go.
 
-**[godoc](https://pkg.go.dev/github.com/martianzhang/json2toon) · [TOON Format](https://toonformat.dev) · [Format Overview](https://toonformat.dev/guide/format-overview.html)**
+[![GoDoc](https://pkg.go.dev/badge/github.com/martianzhang/json2toon)](https://pkg.go.dev/github.com/martianzhang/json2toon) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TOON Format](https://img.shields.io/badge/TOON%20Format-toonformat.dev-blue)](https://toonformat.dev)
 
 ## Features
 
