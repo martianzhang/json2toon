@@ -64,9 +64,21 @@ The CLI auto-detects operation based on file extension:
 - `.json`, `.jsonc`, `.jsonl` → encode (JSON to TOON)
 - `.toon` → decode (TOON to JSON)
 
-### Using with jq
+### Practical Tips
 
 ```bash
+# Convert API response for LLM consumption (TOON uses up to 60% fewer tokens than JSON)
+curl -s https://api.example.com/data | j2t
+
+# See token savings estimate
+curl -s https://api.example.com/data | j2t --stats >/dev/null
+
+# Convert and save to file
+curl -s https://api.example.com/users | j2t -o users.toon
+
+# Extract a nested array first with jq, then convert
+curl -s https://api.example.com/data | jq '.users' | j2t
+
 # Convert JSONL by merging lines into array first
 cat data.jsonl | jq -s '.' | j2t
 
@@ -80,15 +92,14 @@ echo 'id: 123' | j2t -r
 # Convert TOON file to JSON (auto-detected from .toon extension)
 j2t config.toon -o config.json
 
-# Token statistics
-j2t data.json --stats
-
 # Output to file
 j2t config.json -o config.toon
 
 # Path expansion for lossless round-trip with key folding
 j2t compressed.toon --expandPaths safe -o output.json
 ```
+
+> **TOON reduces LLM costs.** For tabular data, it cuts token usage by up to 60% vs JSON with equal or better accuracy — see [benchmark results](https://toonformat.dev/guide/benchmarks.html) for details.
 
 ## Library Quick Start
 
