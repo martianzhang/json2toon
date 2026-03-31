@@ -217,17 +217,15 @@ func countJSONTokens(data []byte) int {
 	return count * 2 / 3
 }
 
-// countTOONTokens estimates token count for TOON output
-// TOON is more token-efficient, especially with:
-// - Inline arrays: items:[3]: 1,2,3 (1 key + 3 values vs 7 tokens in JSON)
-// - Key folding: data.items.name (1 token vs 3 in JSON)
-// - Tabular arrays: rows as comma-separated values
+// countTOONTokens estimates token count for TOON output.
+// It uses a state machine to correctly count:
+// - Inline arrays: items:[3]: 1,2,3 (1 key + 3 values = 4 tokens)
+// - Tabular arrays: [N]{key1,key2}: header + N rows of comma-separated values
+// - Regular key:value lines as 1 token each
 func countTOONTokens(data []byte) int {
-	// Simple line-based tokenization for TOON
-	// Each line is roughly 1-2 tokens (key: value or array element)
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	count := 0
-	inArray := false
+	inTabular := false // true when inside a tabular array
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -235,10 +233,18 @@ func countTOONTokens(data []byte) int {
 			continue
 		}
 
-		// Array inline: items:[3]: 1,2,3
+		// Tabular array header: [N]{key1,key2}:
+		// Matches lines like "[3]{active,id,name}:" or "items:[3]{key1,key2}:"
+		if strings.Contains(line, "[") && strings.Contains(line, "]{") && strings.HasSuffix(line, ":") {
+			// Count the header line as 1 token
+			count++
+			inTabular = true
+			continue
+		}
+
+		// Inline array on single line: items:[3]: 1,2,3
 		if strings.Contains(line, ":[") && strings.Contains(line, "]:") {
 			count++ // The key
-			// Count values in the line (comma-separated)
 			afterBracket := strings.Index(line, "]:")
 			if afterBracket > 0 {
 				values := strings.TrimSpace(line[afterBracket+2:])
@@ -249,25 +255,24 @@ func countTOONTokens(data []byte) int {
 			continue
 		}
 
-		// Tabular array row: 1,alice,admin
-		if inArray && strings.Contains(line, ",") && !strings.Contains(line, ":") {
+		// Tabular array row: comma-separated values (when inside tabular array)
+		if inTabular && strings.Contains(line, ",") {
 			count += strings.Count(line, ",") + 1
 			continue
 		}
 
-		// Check for array end
-		if strings.HasSuffix(line, "}") {
-			inArray = false
-			continue
+		// End of tabular array (indent resets, no longer comma-separated)
+		if inTabular {
+			inTabular = false
 		}
 
-		// Regular key: value or list item
+		// Regular line: key: value or list item (- prefix)
 		count++
 	}
 
-	// Adjust for tab-delimited arrays which save more tokens
+	// Tab-delimited arrays are more token-efficient
 	tabCount := bytes.Count(data, []byte("\t"))
-	count += tabCount / 2 // Tab delimiters are more token-efficient
+	count += tabCount / 2
 
 	return count
 }
